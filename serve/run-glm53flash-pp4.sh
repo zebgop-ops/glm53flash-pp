@@ -88,7 +88,7 @@ UTIL=${GLM53_UTIL:-0.90}
 MAXLEN=${GLM53_MAXLEN:-524288}   # validated 2026-09-03 (497k needle exact, MTP + graphs, per-rank KV preset); 262144 also has a preset; native max 1048576 not yet reachable
 SEQS=${GLM53_SEQS:-8}
 SPEC_N=${GLM53_SPEC:-3}            # MTP draft depth (0 = off). N=3 validated; N=4 measured worse (57 vs 66-70 C1, 146 vs 158 @4, 155 vs 180 @8; pos-3 acceptance 9%)
-MM=${GLM53_MM:-'{"image":8,"video":0}'}   # --limit-mm-per-prompt JSON; {"image":0,"video":0} = text-only. video=0 until the
+MM=${GLM53_MM:-'{"image":64,"video":0}'}   # --limit-mm-per-prompt JSON; {"image":0,"video":0} = text-only. video=0 until the
                                           # video placeholder mismatch is fixed (a video request KILLS the engine otherwise).
 CG=${GLM53_CG:-FULL_AND_PIECEWISE}  # validated 2026-09-03: 66-70 tok/s single (piecewise 45-47), 158 agg @4, 180 @8; 200k needle exact, soak 36/36 clean
 EXTRA_ARGS=${GLM53_EXTRA_ARGS:-}
@@ -108,7 +108,7 @@ PATCHDIR=${GLM53_PATCH:-/home/r/glm53-run/patch}
 # clean OOM.
 P0=; P1=; P2=; P3=
 if [ "${GLM53_KV_PRESET:-1}" = "1" ] && [ "$PARTITION" = "13,11,11,10" ] && [ "$SPEC_N" = "3" ] \
-   && [ "$MM" = '{"image":8,"video":0}' ]; then
+   && [ "$MM" = '{"image":64,"video":0}' ]; then
   case "$MAXLEN" in
     262144) P0=15289155584; P1=14076575744; P2=14046167040; P3=11065227264 ;;  # maxima 14.74/13.61/13.58/11.31 GiB -> pool 1,801,083 (validated 2026-09-03)
     524288) P0=13900840960; P1=12688261120; P2=12657852416; P3=9674815488 ;;   # maxima 13.45/12.32/12.29/10.01 GiB (discovery 2026-09-03: plain sizing pool 910,222, 497k needle exact)
