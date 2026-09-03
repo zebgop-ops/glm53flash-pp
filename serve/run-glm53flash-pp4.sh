@@ -59,7 +59,7 @@
 #   with plain sizing). Would need per-rank budgets re-derived at that setting (kvbudget.py from a
 #   GLM53_KV_PRESET=0 boot with lower MAXLEN) and long-prompt transients are unprofiled -- untested.
 #   Diagnostic knobs kept: GLM53_SYNC, GLM53_BOUNDS_CHECK, GLM53_SAFE_GATHER, GLM53_SAFE_LOGITS.
-# Knobs: GLM53_PARTITION GLM53_GPUS GLM53_UTIL GLM53_MAXLEN GLM53_SEQS GLM53_CG GLM53_SPEC GLM53_MM
+# Knobs: GLM53_PARTITION GLM53_GPUS GLM53_UTIL GLM53_MAXLEN GLM53_SEQS GLM53_CG GLM53_SPEC GLM53_MM GLM53_REASONING
 #        GLM53_KV0..3 (per-rank KV budgets in bytes)  GLM53_BOUNDS_CHECK=1 (diagnostic slot range checks)
 #        GLM53_SYNC=1 (CUDA_LAUNCH_BLOCKING=1: faults surface at the culprit kernel; slow, diagnostic only)
 #        GLM53_SAFE_GATHER=1 (torch-native indexer K gather instead of the CUDA cp_gather op)
@@ -67,8 +67,11 @@
 #          pools, torch above; the in-situ Triton kernel faults past ~130k tokens -- see header)
 #        GLM53_EXTRA_ARGS (e.g. --max-num-batched-tokens 8192, --no-enable-prefix-caching)
 #        GLM53_PORT GLM53_NAME GLM53_IMG GLM53_PATCH
-# Reasoning: the chat template ALWAYS thinks (default effort max); pass
-#   chat_template_kwargs {"reasoning_effort": "low"|"high"} to shorten it.
+# Reasoning: the chat template ALWAYS thinks. Its own default effort is "max"; the launcher
+#   sets the SERVER default to "high" (GLM53_REASONING, since 2026-09-03) via
+#   --default-chat-template-kwargs; requests can still pass reasoning_effort low|high|max
+#   (top-level field or chat_template_kwargs). Measured on one arithmetic prompt: max 118
+#   completion tokens, high 54-68, low 41 -- all correct.
 
 NAME=${GLM53_NAME:-glm53flash-pp}
 PORT=${GLM53_PORT:-8002}
@@ -89,6 +92,10 @@ MM=${GLM53_MM:-'{"image":8,"video":0}'}   # --limit-mm-per-prompt JSON; {"image"
                                           # video placeholder mismatch is fixed (a video request KILLS the engine otherwise).
 CG=${GLM53_CG:-FULL_AND_PIECEWISE}  # validated 2026-09-03: 66-70 tok/s single (piecewise 45-47), 158 agg @4, 180 @8; 200k needle exact, soak 36/36 clean
 EXTRA_ARGS=${GLM53_EXTRA_ARGS:-}
+# Server-side default for the template's reasoning effort (the template's own default is
+# "max"; only "low"|"high" change it). Per-request `reasoning_effort` / chat_template_kwargs
+# still override. Set GLM53_REASONING=max to restore the model-card default.
+REASONING=${GLM53_REASONING:-high}
 PATCHDIR=${GLM53_PATCH:-/home/r/glm53-run/patch}
 # Per-rank KV budgets (bytes; overlay gpu_worker.py reads VLLM_KV_CACHE_MEMORY_RANK<i>).
 # Unset = vLLM's own profiling at GLM53_UTIL on every rank (the pool is then bounded by
@@ -175,6 +182,7 @@ docker run -d --name "$NAME" --gpus "$([ "$GPU_ORDER" = all ] && echo all || ech
   $EXTRA_ARGS \
   "${SPEC_ARGS[@]}" \
   --enable-auto-tool-choice --tool-call-parser glm47 --reasoning-parser glm45 \
+  --default-chat-template-kwargs "{\"reasoning_effort\":\"$REASONING\"}" \
   >/dev/null
 
 echo "launched $NAME on :$PORT  (PP$PP $PARTITION, cudagraph $CG, maxlen $MAXLEN, seqs $SEQS, mtp $SPEC_N, mm $MM, overlay files: $((${#MOUNTS[@]}/2)))"
