@@ -32,8 +32,8 @@ GLM53_HF=/path/to/hf-cache GLM53_PATCH=$PWD/patch ./serve/run-glm53flash-pp4.sh
 `serve/run-glm53flash-pp4.sh` is the exact production launcher: every flag, env var and
 bind-mount, with inline commentary on why each load-bearing flag is load-bearing. Defaults
 are the validated production configuration: partition `13,11,11,10`, MTP depth 3,
-`FULL_AND_PIECEWISE` CUDA graphs, `--max-model-len 524288`, images on (video off, see
-below), per-rank KV budgets from the preset table, server default `reasoning_effort=high`
+`FULL_AND_PIECEWISE` CUDA graphs, `--max-model-len 524288`, images on (64 per prompt; the limit is per prompt and a chat
+session is one prompt; video off, see below), per-rank KV budgets from the preset table, server default `reasoning_effort=high`
 (the template's own default is `max`; requests may pass `low|high|max`). Knobs: `GLM53_MAXLEN`, `GLM53_SPEC`,
 `GLM53_CG`, `GLM53_SEQS`, `GLM53_MM`, `GLM53_PARTITION`, `GLM53_KV0..3`, plus the
 diagnostic switches described in [FINDINGS.md](FINDINGS.md).
