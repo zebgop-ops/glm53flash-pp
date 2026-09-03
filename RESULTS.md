@@ -24,6 +24,7 @@ Partition 13,11,11,10 · MTP depth 3 · `FULL_AND_PIECEWISE` CUDA graphs ·
 | prefill, 497k-token prompt | 1.8k tok/s |
 | planted-value recall | exact at 31.9k, 60.2k, 111.5k, 219.2k and 497.1k tokens |
 | soak (4 streams, temperature 1.0, 7k-token prompts) | 36 requests in 5 min, 0 degenerate loops |
+| hit-path soak (12 conversations × 6 turns over a shared 20k-token document, 6 concurrent, temperature 1.0, MTP on, prefix-cache hits) | 0 loops / 72 responses, 11/12 planted-code recalls, after the §9 fix (before it: production loop within the first day) |
 | per-rank memory (weights + non-torch) | 44.7 / 45.8 / 45.8 / 48.2 GiB; rank 3 at 63.1/64 GiB with KV |
 | boot | ~95 s weight load, ~100 s graph capture, ~5 min to ready |
 

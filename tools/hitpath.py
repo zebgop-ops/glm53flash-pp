@@ -33,13 +33,16 @@ def conversation(ci):
         content, reasoning, usage = call(msgs)
         tokens += usage["completion_tokens"]
         for txt in (content, reasoning):
-            if txt and find_loop(txt):
-                loops += 1; print(f"  LOOP conv{ci} turn{t}: {txt[-80:]!r}", flush=True); break
+            reps, unit = find_loop(txt) if txt else (0, "")
+            if reps:
+                loops += 1; print(f"  LOOP conv{ci} turn{t}: reps={reps} unit={unit[:12]!r} tail={txt[-60:]!r}", flush=True); break
         msgs.append({"role": "assistant", "content": content or "..."})
         if t == TURNS - 2:
             msgs.append({"role": "user", "content": f"What is the access code for room {ci}? Digits only."})
         elif t == TURNS - 1:
-            recalls.append(code in content); break
+            ok = code in content; recalls.append(ok)
+            if not ok: print(f"  MISS conv{ci}: expected {code}, got {content[:160]!r}", flush=True)
+            break
         else:
             msgs.append({"role": "user", "content": rnd.choice([
                 "Summarize the document's third quarter in two sentences.",
