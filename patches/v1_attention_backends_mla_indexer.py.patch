@@ -1,0 +1,99 @@
+--- a/vllm/v1/attention/backends/mla/indexer.py
++++ b/vllm/v1/attention/backends/mla/indexer.py
+@@ -20,7 +20,7 @@
+ from vllm.triton_utils import tl, triton
+ from vllm.utils.deep_gemm import (
+     get_paged_mqa_logits_metadata,
+-    has_deep_gemm,
++    is_deep_gemm_supported,
+ )
+ from vllm.utils.platform_utils import num_compute_units
+ from vllm.v1.attention.backend import (
+@@ -522,6 +522,13 @@
+     num_prefills: int
+     num_prefill_tokens: int
+ 
++    # Per-request first block index for the tail KV cache group, stored as
++    # Python ints so they are immune to GPU memory corruption during CUDA
++    # graph replay.  Used by the kpool eager break to recompute the tail
++    # slot mapping on-the-fly instead of relying on a GPU tensor.
++    tail_own_blocks: list[int] | None = None
++    tail_kpool: int = 0
++
+     decode: DeepSeekV32IndexerDecodeMetadata | None = None
+     prefill: DeepseekV32IndexerPrefillMetadata | None = None
+ 
+@@ -596,6 +603,7 @@
+         # compressed_slot_mapping) -- the tail is storage-only and exports only
+         # slot_mapping, which is rebuilt per step from the group's block table.
+         super().__init__(kv_cache_spec, layer_names, vllm_config, device)
++        self._cached_own_blocks: list[int] | None = None
+ 
+     def build(
+         self,
+@@ -606,26 +614,35 @@
+         num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+             split_decodes_and_prefills(common_attn_metadata)
+         )
+-        slot_mapping = common_attn_metadata.slot_mapping
+         positions = common_attn_metadata.positions
++        kpool = self.kv_cache_spec.block_size
+         if positions is not None:
+-            # Circular per-request layout; the generic kernel output collapses
+-            # onto tail block 0 for pos >= kpool (see compute_... docstring).
+-            slot_mapping = compute_kpool_tail_slot_mapping(
+-                slot_mapping,
+-                common_attn_metadata.block_table_tensor,
+-                common_attn_metadata.query_start_loc,
+-                positions,
+-                common_attn_metadata.num_actual_tokens,
+-                common_attn_metadata.num_reqs,
+-                self.kv_cache_spec.block_size,
+-            )
++            num_reqs = common_attn_metadata.num_reqs
++            bt = common_attn_metadata.block_table_tensor
++            self._cached_own_blocks = bt[:num_reqs, 0].tolist()
++            # (sm80 fork) The generic slot_mapping kernel computes
++            #   block_table[req, pos // block_size]
++            # which is out of bounds for the tail cache (1 block per
++            # request, so block_table has only 1 column).  Recompute
++            # the circular slot mapping from the block table directly:
++            #   slot = block_table[req, 0] * kpool + pos % kpool
++            query_start_loc = common_attn_metadata.query_start_loc
++            counts = (query_start_loc[1:num_reqs + 1]
++                      - query_start_loc[:num_reqs])
++            block_ids = bt[:num_reqs, 0].repeat_interleave(counts)
++            num_actual = block_ids.shape[0]
++            slot_mapping = (block_ids * kpool
++                            + positions[:num_actual] % kpool)
++        else:
++            slot_mapping = common_attn_metadata.slot_mapping
+         return DeepseekV32IndexerMetadata(
+             seq_lens=common_attn_metadata.seq_lens,
+             max_seq_len=common_attn_metadata.max_seq_len,
+             slot_mapping=slot_mapping,
+             num_decodes=num_decodes,
+             num_decode_tokens=num_decode_tokens,
++            tail_own_blocks=self._cached_own_blocks,
++            tail_kpool=kpool,
+             num_prefills=num_prefills,
+             num_prefill_tokens=num_prefill_tokens,
+             prefill=None,
+@@ -650,7 +667,7 @@
+     return (
+         current_platform.is_cuda()
+         and current_platform.is_device_capability_family(100)
+-        and has_deep_gemm()
++        and is_deep_gemm_supported()
+     )
+ 
+ 
+@@ -1292,7 +1309,7 @@
+                 seq_lens = seq_lens.unsqueeze(-1)
+ 
+             # DeepGEMM is required for the paged MQA logits on CUDA devices
+-            if current_platform.is_cuda() and has_deep_gemm():
++            if current_platform.is_cuda() and is_deep_gemm_supported():
+                 self.scheduler_metadata_buffer[:] = get_paged_mqa_logits_metadata(
+                     seq_lens,
+                     self.kv_cache_spec.storage_block_size,

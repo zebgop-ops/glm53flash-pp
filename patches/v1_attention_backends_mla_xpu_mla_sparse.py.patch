@@ -1,0 +1,41 @@
+--- a/vllm/v1/attention/backends/mla/xpu_mla_sparse.py
++++ b/vllm/v1/attention/backends/mla/xpu_mla_sparse.py
+@@ -97,6 +97,17 @@
+     block_size: int = 1
+     topk_tokens: int = 2048
+ 
++    # (ported from the newer PR branch via the Malav-P sm80 fork) The shared
++    # MLA layer (`mla_attention.py::forward_impl`) reads these decode/prefill
++    # counts unconditionally for every MLA metadata and uses
++    # `num_decode_tokens` to split MQA vs dense-MHA tokens. This backend serves
++    # both prefill and decode through the top-k sparse MQA path, so all tokens
++    # are routed as "decode" (`num_decode_tokens == num_actual_tokens`,
++    # `num_prefills == 0`); the dense-MHA prefill branch is never entered.
++    num_decodes: int = 0
++    num_prefills: int = 0
++    num_decode_tokens: int = 0
++
+ 
+ @dataclass
+ class XPUMLASparseMetadataBuilder(AttentionMetadataBuilder[XPUMLASparseMetadata]):
+@@ -166,6 +177,11 @@
+             req_id_per_token=req_id_per_token,
+             block_size=self.kv_cache_spec.block_size,
+             topk_tokens=self.topk_tokens,
++            # Route every token through the sparse MQA path (see the field
++            # definitions above); this backend has no dense-MHA prefill.
++            num_decodes=common_attn_metadata.num_reqs,
++            num_prefills=0,
++            num_decode_tokens=common_attn_metadata.num_actual_tokens,
+         )
+         return metadata
+ 
+@@ -254,7 +270,7 @@
+             attn_metadata.block_table,
+             topk_indices,
+             BLOCK_SIZE=attn_metadata.block_size,
+-            NUM_TOPK_TOKENS=attn_metadata.topk_tokens,
++            NUM_TOPK_TOKENS=topk_indices.shape[1],
+         )
+ 
+         attn_out = self._forward_bf16_kv(

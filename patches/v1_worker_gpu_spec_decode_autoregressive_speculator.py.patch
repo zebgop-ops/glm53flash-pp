@@ -1,0 +1,57 @@
+--- a/vllm/v1/worker/gpu/spec_decode/autoregressive/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/autoregressive/speculator.py
+@@ -2,6 +2,8 @@
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ from typing import Any
+ 
++import os
++
+ import torch
+ import torch.nn as nn
+ 
+@@ -26,6 +28,29 @@
+ logger = init_logger(__name__)
+ 
+ 
++# glm53-run diagnostic (GLM53_BOUNDS_CHECK=1): verify every KV-group slot mapping the
++# drafter is about to write with stays inside its cache, raising a Python error instead
++# of an MMU fault (Xid 31 wedges the driver until reboot). One host sync per check.
++_GLM53_BOUNDS_CHECK = os.environ.get("GLM53_BOUNDS_CHECK") == "1"
++
++
++def _glm53_check_slot_mappings(tag: str, slot_mappings, kv_cache_config) -> None:
++    if not _GLM53_BOUNDS_CHECK:
++        return
++    for gi, (sm, group) in enumerate(zip(slot_mappings, kv_cache_config.kv_cache_groups)):
++        if sm.numel() == 0:
++            continue
++        cap = kv_cache_config.num_blocks * group.kv_cache_spec.block_size
++        s64 = sm.to(torch.int64)
++        mx, mn = int(s64.max().item()), int(s64.min().item())
++        if mx >= cap or mn < -1:
++            raise RuntimeError(
++                f"GLM53_BOUNDS_CHECK: {tag}: kv group {gi} ({group.layer_names[:2]}...) "
++                f"slot range [{mn}, {mx}] outside capacity {cap} "
++                f"(num_blocks={kv_cache_config.num_blocks}, block_size={group.kv_cache_spec.block_size})"
++            )
++
++
+ class AutoRegressiveSpeculator(DraftModelSpeculator):
+     def __init__(self, vllm_config: VllmConfig, device: torch.device):
+         super().__init__(vllm_config, device)
+@@ -479,6 +504,7 @@
+                     positions,
+                     batch_desc.num_tokens,
+                 )
++                _glm53_check_slot_mappings("draft slot mappings#1", slot_mappings, self.kv_cache_config)
+                 slot_mappings_by_layer = build_slot_mappings_by_layer(
+                     slot_mappings, self.kv_cache_config
+                 )
+@@ -527,6 +553,7 @@
+                 batch_desc.num_tokens,
+             )
+             if batch_desc.cg_mode != CUDAGraphMode.FULL:
++                _glm53_check_slot_mappings("draft slot mappings#2", slot_mappings, self.kv_cache_config)
+                 slot_mappings_by_layer = build_slot_mappings_by_layer(
+                     slot_mappings, self.kv_cache_config
+                 )

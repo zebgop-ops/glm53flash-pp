@@ -1,0 +1,172 @@
+--- a/vllm/models/glm5next/nvidia/ops/kpool_compress.py
++++ b/vllm/models/glm5next/nvidia/ops/kpool_compress.py
+@@ -16,6 +16,12 @@
+ 
+ from vllm.triton_utils import tl, triton
+ 
++# SM80 Triton lacks fp8e4nv; cast float32 → fp8e4b15 (same bit layout in the
++# clamped range) → uint8 so that stores into float8_e4m3fn buffers work on A100.
++@triton.jit
++def _to_fp8_u8(x):
++    return x.to(tl.float8e4b15).to(tl.uint8, bitcast=True)
++
+ # The indexer head dim is fixed at 128 in the current GLM5Next config; the
+ # Hadamard rotation below is the hard-coded H128 transform.
+ INDEX_HEAD_DIM = 128
+@@ -120,7 +126,11 @@
+     scale = tl.exp2(tl.ceil(tl.log2(absmax * (1.0 / 448.0))))
+     y = tl.minimum(tl.maximum(x / scale[:, None], -448.0), 448.0)
+ 
+-    tl.store(qout_ptr + rows[:, None] * 128 + offs[None, :], y, mask=rmask[:, None])
++    # SM80 Triton lacks fp8e4nv; cast via fp8e4b15 (identical bit layout in
++    # the clamped [-448,448] range) and bitcast to uint8 for the store.
++    y_u8 = y.to(tl.float8e4b15).to(tl.uint8, bitcast=True)
++    tl.store(qout_ptr + rows[:, None] * 128 + offs[None, :],
++             y_u8, mask=rmask[:, None])
+     tl.store(sout_ptr + rows, scale, mask=rmask)
+ 
+ 
+@@ -142,14 +152,14 @@
+     assert q.dtype == torch.bfloat16
+     assert q.is_contiguous()
+     n_rows = q.shape[0]
+-    q_fp8 = torch.empty((n_rows, 128), dtype=torch.float8_e4m3fn, device=q.device)
++    q_fp8_buf = torch.empty((n_rows, 128), dtype=torch.uint8, device=q.device)
+     q_scale = torch.empty((n_rows, 1), dtype=torch.float32, device=q.device)
+     if n_rows == 0:
+-        return q_fp8, q_scale
++        return q_fp8_buf.view(torch.float8_e4m3fn), q_scale
+     BLOCK_R = 32
+     grid = (triton.cdiv(n_rows, BLOCK_R),)
+-    _fwht_quant_kernel[grid](q, q_fp8, q_scale, n_rows, BLOCK_R=BLOCK_R, num_warps=2)
+-    return q_fp8, q_scale
++    _fwht_quant_kernel[grid](q, q_fp8_buf, q_scale, n_rows, BLOCK_R=BLOCK_R, num_warps=2)
++    return q_fp8_buf.view(torch.float8_e4m3fn), q_scale
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -314,13 +324,13 @@
+             + S_OFFSET_NBYTES_IN_PAGE // 4
+             + loc_token_offset_in_page
+         )
+-        tl.store(buf_fp8_ptr + out_k_offsets, quantized, mask=mask)
++        tl.store(buf_fp8_ptr + out_k_offsets, _to_fp8_u8(quantized), mask=mask)
+         tl.store(buf_fp32_ptr + out_s_offset, scale, mask=do_write)
+ 
+     if RETURN_COMPRESSED:
+         tl.store(
+             compressed_k_ptr + row * HEAD_DIM + offs,
+-            quantized,
++            _to_fp8_u8(quantized),
+             mask=offs < HEAD_DIM,
+         )
+         tl.store(compressed_scale_ptr + row, scale)
+@@ -385,7 +395,7 @@
+             )
+         return None
+ 
+-    buf_fp8 = buf.view(torch.float8_e4m3fn)
++    buf_fp8 = buf  # already uint8; kernel stores via _to_fp8_u8
+     buf_fp32 = buf.view(torch.float32)
+     # bytes per page (last dim of kv_cache) viewed as uint8
+     buf_numel_per_page = buf.stride(0)
+@@ -394,7 +404,7 @@
+     if return_compressed:
+         compressed_k = torch.empty(
+             (slot_k.shape[0], head_dim),
+-            dtype=torch.float8_e4m3fn,
++            dtype=torch.uint8,
+             device=slot_k.device,
+         )
+         compressed_scale = torch.empty(
+@@ -432,7 +442,7 @@
+     )
+ 
+     if return_compressed:
+-        return compressed_k, compressed_scale
++        return compressed_k.view(torch.float8_e4m3fn), compressed_scale
+     return None
+ 
+ 
+@@ -452,6 +462,8 @@
+     tslot_ptr,
+     tail_ptr,
+     n_tokens,
++    TAIL_BLOCK_STRIDE,
++    TAIL_HEAD_STRIDE,
+     HEAD_DIM: tl.constexpr,
+     KPOOL: tl.constexpr,
+     BLOCK_D: tl.constexpr,
+@@ -471,18 +483,17 @@
+     ahead = tl.load(tslot_ptr + i + KPOOL, mask=i + KPOOL < n_tokens, other=-1).to(
+         tl.int64
+     )
+-    # Match the torch semantics exactly: a negative ahead slot floors to a
+-    # block id that differs from every real block -> token is in the tail.
+-    # Only divide non-negative slots (Triton int div truncates, torch floors).
+     if ahead >= 0 and ahead // KPOOL == blk:
+         return
+     offs = tl.arange(0, BLOCK_D)
+     m = offs < HEAD_DIM
+-    base = (blk * 2 * KPOOL + t % KPOOL) * HEAD_DIM
++    slot_in_block = t % KPOOL
++    base_k = blk * TAIL_BLOCK_STRIDE + slot_in_block * HEAD_DIM
++    base_s = base_k + TAIL_HEAD_STRIDE
+     k = tl.load(key_ptr + i * HEAD_DIM + offs, mask=m)
+     s = tl.load(score_ptr + i * HEAD_DIM + offs, mask=m)
+-    tl.store(tail_ptr + base + offs, k, mask=m)
+-    tl.store(tail_ptr + base + KPOOL * HEAD_DIM + offs, s, mask=m)
++    tl.store(tail_ptr + base_k + offs, k, mask=m)
++    tl.store(tail_ptr + base_s + offs, s, mask=m)
+ 
+ 
+ def kpool_seed_tail_cache(
+@@ -505,6 +516,8 @@
+         tslot,
+         tail_kv_cache,
+         n,
++        tail_kv_cache.stride(0),
++        tail_kv_cache.stride(1),
+         HEAD_DIM=head_dim,
+         KPOOL=kpool,
+         BLOCK_D=triton.next_power_of_2(head_dim),
+@@ -677,7 +690,7 @@
+                 + S_OFFSET_NBYTES_IN_PAGE // 4
+                 + loc_token_offset_in_page
+             )
+-            tl.store(buf_fp8_ptr + out_k_offsets, quantized, mask=dim_mask)
++            tl.store(buf_fp8_ptr + out_k_offsets, _to_fp8_u8(quantized), mask=dim_mask)
+             tl.store(buf_fp32_ptr + out_s_offset, scale)
+ 
+         # Stash the current token AFTER any completion read so the completion
+@@ -750,7 +763,7 @@
+ 
+     page_size = kv_cache.shape[1]
+     buf = kv_cache
+-    buf_fp8 = buf.view(torch.float8_e4m3fn)
++    buf_fp8 = buf  # already uint8; kernel stores via _to_fp8_u8
+     buf_fp32 = buf.view(torch.float32)
+ 
+     # The kernel indexes the int tensors as ``req * next_n + t`` (row-major),
+@@ -761,6 +774,21 @@
+     slot_mapping = slot_mapping.contiguous()
+     positions = positions.contiguous()
+ 
++    # Lightweight check: confirm the decode kernel is actually called.
++    # DISABLED: .item() forces GPU→CPU sync per kpool layer per step (~30% hit).
++    # import sys as _sys, os as _os
++    # if not hasattr(kpool_decode_update_and_maybe_write_cache_batched, '_dbg'):
++    #     kpool_decode_update_and_maybe_write_cache_batched._dbg = {
++    #         'last_pos': None, 'n': 0}
++    # _dbg = kpool_decode_update_and_maybe_write_cache_batched._dbg
++    # _dbg['n'] += 1
++    # _pos_val = positions.max().item()
++    # if _dbg['last_pos'] != _pos_val or _dbg['n'] <= 2:
++    #     print(f"DEBUG KPOOL [{_os.getpid()}] call#{_dbg['n']}: "
++    #           f"pos={_pos_val} nreqs={num_requests}",
++    #           file=_sys.stderr, flush=True)
++    #     _dbg['last_pos'] = _pos_val
++
+     _kpool_decode_update_batched_kernel[(num_requests,)](
+         buf_fp8,
+         buf_fp32,

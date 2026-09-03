@@ -1,0 +1,413 @@
+--- a/vllm/model_executor/layers/sparse_attn_indexer_kpool.py
++++ b/vllm/model_executor/layers/sparse_attn_indexer_kpool.py
+@@ -25,6 +25,7 @@
+     fp8_fp4_mqa_logits,
+     fp8_fp4_paged_mqa_logits,
+     has_deep_gemm,
++    is_deep_gemm_supported,
+ )
+ from vllm.utils.torch_utils import (
+     LayerNameType,
+@@ -45,6 +46,103 @@
+ 
+ logger = init_logger(__name__)
+ 
++# glm53-run diagnostic: GLM53_BOUNDS_CHECK=1 turns every cache-slot write in this op into a
++# host-synchronised range check that raises a Python error naming the offending buffer,
++# instead of letting an out-of-range slot become an MMU fault (Xid 31) that wedges the
++# driver until reboot. Costs one sync per call; leave unset in production.
++_BOUNDS_CHECK = os.environ.get("GLM53_BOUNDS_CHECK") == "1"
++# GLM53_SAFE_GATHER=1 replaces the CUDA cp_gather_indexer_k_quant_cache op with a
++# torch-native gather (bounds-safe by construction; slower). Diagnostic/fallback for
++# the long-context Xid 31 seen on 2026-09-02/03 (fault surfaced at the first error
++# check after this gather).
++_SAFE_GATHER = os.environ.get("GLM53_SAFE_GATHER") == "1"
++# GLM53_SAFE_LOGITS=1 replaces the Triton prefill MQA-logits kernel with a chunked torch
++# implementation (slow; diagnostic). GLM53_BOUNDS_CHECK=1 also logs the exact arguments of
++# every prefill logits launch with N > 24000 pools (the in-situ fault window).
++# GLM53_SAFE_LOGITS: "1" = always torch, "0" = always Triton, unset/"auto" = Triton up to
++# _SAFE_LOGITS_N pools, torch above. Measured 2026-09-03: the Triton kernel is clean in
++# isolation at every autotune config up to N=65536, yet in situ it raised an illegal
++# memory access on every run once a prompt passed ~130k tokens (N > ~32k pools) --
++# three engine deaths, two driver wedges. With the torch path a 219k-token needle recalled
++# exactly. Short contexts have thousands of clean Triton calls (soaks, needles to 111k).
++_SAFE_LOGITS_MODE = os.environ.get("GLM53_SAFE_LOGITS", "auto")
++_SAFE_LOGITS_N = int(os.environ.get("GLM53_SAFE_LOGITS_N", "24000"))
++
++
++def _use_safe_logits(n: int) -> bool:
++    if _SAFE_LOGITS_MODE == "1":
++        return True
++    if _SAFE_LOGITS_MODE == "0":
++        return False
++    return n > _SAFE_LOGITS_N
++
++
++def _mqa_logits_torch(q_fp8, k_fp8, k_scale, weights, ks, ke, n_chunk=2048):
++    """logits[m, n] = sum_h relu(q[m,h,:] . k[n,:]) * k_scale[n] * w[m,h] for ks[m] <= n < ke[m],
++    else -inf. q [M,H,D] fp8, k [N,D] fp8, k_scale [N] f32, weights [M,H] f32, ks/ke [M] int32."""
++    M, H, D = q_fp8.shape
++    N = k_fp8.shape[0]
++    q = q_fp8.to(torch.bfloat16).reshape(M * H, D)
++    k = k_fp8.to(torch.bfloat16)
++    w = weights.to(torch.float32)
++    out = torch.full((M, N), float("-inf"), dtype=torch.float32, device=q.device)
++    n_idx = torch.arange(N, device=q.device, dtype=torch.int32)
++    valid = (n_idx[None, :] >= ks[:, None]) & (n_idx[None, :] < ke[:, None])
++    for n0 in range(0, N, n_chunk):
++        n1 = min(N, n0 + n_chunk)
++        s_ = (q @ k[n0:n1].T).view(M, H, n1 - n0).to(torch.float32) * k_scale[None, None, n0:n1]
++        s_ = torch.relu(s_) * w[:, :, None]
++        out[:, n0:n1] = torch.where(valid[:, n0:n1], s_.sum(dim=1), float("-inf"))
++    return out
++_GATHER_LOGGED = [0]
++
++
++def _gather_k_torch(kv_cache, dst_k, dst_scale, block_table, cu_seq_lens, head_dim):
++    """Torch-native replacement for ops.cp_gather_indexer_k_quant_cache.
++    kv_cache: 3-D [num_blocks, block_size, head_dim+4] uint8; INSIDE a page the layout is
++    [block_size x head_dim K bytes] followed by [block_size x 4 fp32-scale bytes]
++    (S_OFFSET_NBYTES_IN_PAGE = block_size*head_dim, see kpool_compress.py), NOT per-row.
++    dst_k [T, head_dim] fp8, dst_scale [T, 4] uint8; cu_seq_lens [R+1] (pool units);
++    block_table [R, max_blocks]."""
++    num_blocks, block_size, row_bytes = kv_cache.shape
++    dev = kv_cache.device
++    cu = cu_seq_lens.to(torch.int64)
++    lens = cu[1:] - cu[:-1]
++    total = int(cu[-1].item())
++    if total == 0:
++        return
++    req_of_pool = torch.repeat_interleave(torch.arange(lens.shape[0], device=dev), lens)
++    pos_in_req = torch.arange(total, device=dev) - cu[:-1][req_of_pool]
++    blk_col = pos_in_req // block_size
++    off = pos_in_req % block_size
++    if _BOUNDS_CHECK:
++        assert int(blk_col.max().item()) < block_table.shape[1], (
++            f"GLM53 gather: block column {int(blk_col.max().item())} >= table width "
++            f"{block_table.shape[1]} (block_size={block_size}, max_len={int(lens.max().item())})")
++    blk = block_table.to(torch.int64)[req_of_pool, blk_col]
++    if _BOUNDS_CHECK:
++        assert int(blk.max().item()) < num_blocks and int(blk.min().item()) >= 0, (
++            f"GLM53 gather: block id range [{int(blk.min().item())},{int(blk.max().item())}] "
++            f"outside num_blocks={num_blocks}")
++    pages = kv_cache.view(num_blocks, block_size * row_bytes)          # [B, page_bytes]
++    k_region = pages[:, : block_size * head_dim].view(num_blocks, block_size, head_dim)
++    s_region = pages[:, block_size * head_dim :].view(num_blocks, block_size, 4)
++    dst_k.view(torch.uint8)[:total].copy_(k_region[blk, off])
++    dst_scale[:total].copy_(s_region[blk, off])
++
++
++def _bc(tag: str, slots: torch.Tensor, capacity: int) -> None:
++    if not _BOUNDS_CHECK or slots is None or slots.numel() == 0:
++        return
++    s64 = slots.to(torch.int64)
++    mx = int(s64.max().item())
++    mn = int(s64.min().item())
++    if mx >= capacity or mn < -1:
++        raise RuntimeError(
++            f"GLM53_BOUNDS_CHECK: {tag}: slot range [{mn}, {mx}] outside capacity "
++            f"{capacity} (numel={slots.numel()})"
++        )
++
+ RADIX_TOPK_WORKSPACE_SIZE = 1024 * 1024
+ 
+ # MXFP4 layout: 2 values packed per byte, ue8m0 (1-byte) scale per block of 32.
+@@ -275,6 +373,14 @@
+     fp8_dtype = current_platform.fp8_dtype()
+     k_cache_prefix = _resolve_layer_name(k_cache_prefix)
+ 
++    # The CUDA cp_gather / indexer_k_quant_and_cache kernels assume a 3-D
++    # kv_cache [num_blocks, block_size, cache_stride] and use kv_cache.size(1)
++    # as cache_block_size.  With LBHNC layout the per-layer slice is 4-D
++    # [num_blocks, num_heads, block_size, head_dim]; num_heads is always 1 for
++    # MLA, so collapsing it makes size(1) == block_size and stride(0) unchanged.
++    if kv_cache.dim() == 4:
++        kv_cache = kv_cache.view(kv_cache.shape[0], -1, kv_cache.shape[-1])
++
+     # assert isinstance(attn_metadata, dict)
+     if not isinstance(attn_metadata, dict):
+         # Reserve workspace for indexer during profiling run
+@@ -369,6 +475,8 @@
+             if n_prefill > 0:
+                 # decode tokens are batched first; prefill tokens follow.
+                 prefill_slice = slice(num_decode_tokens, num_tokens)
++                _bc("kpool prefill compress slots", slot_mapping[prefill_slice],
++                    kv_cache.shape[0] * kv_cache.shape[1])
+                 _kpool_compress_insert(
+                     k[prefill_slice],
+                     gate_score[prefill_slice],
+@@ -413,6 +521,8 @@
+                         # maps to a different tail block (1 block/req) or is
+                         # past the batch. Writes are one-per-token to distinct
+                         # pos % kpool offsets, so the result is identical.
++                        _bc("kpool prefill tail slots", tail_meta.slot_mapping[prefill_slice],
++                            tail_kv_cache.shape[0] * index_kpool)
+                         kpool_seed_tail_cache(
+                             tail_kv_cache,
+                             k[prefill_slice],
+@@ -424,6 +534,8 @@
+         else:
+             # standard: per-token fp8 quant + scatter (all tokens).
+             assert scale_fmt is not None
++            _bc("indexer k_quant_and_cache slots", slot_mapping,
++                kv_cache.shape[0] * kv_cache.shape[1])
+             ops.indexer_k_quant_and_cache(
+                 k,
+                 kv_cache,
+@@ -496,13 +608,34 @@
+             k_scale = k_scale_full[: chunk.total_seq_lens]
+ 
+             if not chunk.skip_kv_gather:
+-                ops.cp_gather_indexer_k_quant_cache(
+-                    kv_cache,
+-                    k_quant,
+-                    k_scale,
+-                    chunk.block_table,
+-                    chunk.cu_seq_lens,
+-                )
++                if _BOUNDS_CHECK and _GATHER_LOGGED[0] < 6:
++                    _GATHER_LOGGED[0] += 1
++                    logger.info(
++                        "GLM53 gather#%d: kv_cache %s stride %s | k_quant %s | block_table %s "
++                        "max_id %d | cu_seq_lens[-1] %d total_seq_lens %d | q rows %d",
++                        _GATHER_LOGGED[0], tuple(kv_cache.shape), tuple(kv_cache.stride()),
++                        tuple(k_quant.shape), tuple(chunk.block_table.shape),
++                        int(chunk.block_table.max().item()), int(chunk.cu_seq_lens[-1].item()),
++                        int(chunk.total_seq_lens), int(chunk.token_end - chunk.token_start),
++                    )
++                if _BOUNDS_CHECK:
++                    assert int(chunk.cu_seq_lens[-1].item()) <= k_quant.shape[0], (
++                        f"GLM53 gather: cu_seq_lens[-1]={int(chunk.cu_seq_lens[-1].item())} > "
++                        f"workspace rows {k_quant.shape[0]}")
++                    assert int(chunk.block_table.max().item()) < kv_cache.shape[0], (
++                        f"GLM53 gather: block id {int(chunk.block_table.max().item())} >= "
++                        f"num_blocks {kv_cache.shape[0]}")
++                if _SAFE_GATHER:
++                    _gather_k_torch(kv_cache, k_quant, k_scale, chunk.block_table,
++                                    chunk.cu_seq_lens, head_dim)
++                else:
++                    ops.cp_gather_indexer_k_quant_cache(
++                        kv_cache,
++                        k_quant,
++                        k_scale,
++                        chunk.block_table,
++                        chunk.cu_seq_lens,
++                    )
+ 
+             q_slice = q_quant[chunk.token_start : chunk.token_end]
+             q_scale_slice = (
+@@ -520,14 +653,57 @@
+                 q_slice_cast = q_slice
+                 k_quant_cast = k_quant
+                 k_scale_cast = k_scale.view(torch.float32).squeeze(-1)
+-            logits = fp8_fp4_mqa_logits(
+-                (q_slice_cast, q_scale_slice),
+-                (k_quant_cast, k_scale_cast),
+-                weights[chunk.token_start : chunk.token_end],
+-                chunk.cu_seqlen_ks,
+-                chunk.cu_seqlen_ke,
+-                clean_logits=False,
+-            )
++            if is_deep_gemm_supported():
++                logits = fp8_fp4_mqa_logits(
++                    (q_slice_cast, q_scale_slice),
++                    (k_quant_cast, k_scale_cast),
++                    weights[chunk.token_start : chunk.token_end],
++                    chunk.cu_seqlen_ks,
++                    chunk.cu_seqlen_ke,
++                    clean_logits=False,
++                )
++            else:
++                # sm80 (no DeepGEMM): Triton MQA-logits fallback (Malav-P fork).
++                from vllm.v1.attention.ops.mqa_logits_triton import (
++                    fp8_mqa_logits_triton,
++                )
++
++                if _BOUNDS_CHECK:
++                    _ke = int(chunk.cu_seqlen_ke.max().item()); _ks = int(chunk.cu_seqlen_ks.min().item())
++                    assert 0 <= _ks and _ke <= k_quant_cast.shape[0], (
++                        f"GLM53 logits: ks/ke range [{_ks},{_ke}] vs N={k_quant_cast.shape[0]}")
++                    assert chunk.cu_seqlen_ks.shape[0] >= q_slice_cast.shape[0], (
++                        f"GLM53 logits: ks rows {chunk.cu_seqlen_ks.shape[0]} < M={q_slice_cast.shape[0]}")
++                if _BOUNDS_CHECK and k_quant_cast.shape[0] > 24000:
++                    _w = weights[chunk.token_start : chunk.token_end]
++                    logger.info(
++                        "GLM53 logits args: M=%d N=%d | q %s %s stride %s ptr %#x | k %s %s stride %s "
++                        "| scale %s %s stride %s numel %d | w %s %s stride %s | ks %s [%d,%d] rows %d "
++                        "| ke %s [%d,%d] | alloc %.2f GiB",
++                        q_slice_cast.shape[0], k_quant_cast.shape[0],
++                        tuple(q_slice_cast.shape), q_slice_cast.dtype, tuple(q_slice_cast.stride()), q_slice_cast.data_ptr(),
++                        tuple(k_quant_cast.shape), k_quant_cast.dtype, tuple(k_quant_cast.stride()),
++                        tuple(k_scale_cast.shape), k_scale_cast.dtype, tuple(k_scale_cast.stride()), k_scale_cast.numel(),
++                        tuple(_w.shape), _w.dtype, tuple(_w.stride()),
++                        chunk.cu_seqlen_ks.dtype, int(chunk.cu_seqlen_ks.min().item()), int(chunk.cu_seqlen_ks.max().item()), chunk.cu_seqlen_ks.shape[0],
++                        chunk.cu_seqlen_ke.dtype, int(chunk.cu_seqlen_ke.min().item()), int(chunk.cu_seqlen_ke.max().item()),
++                        torch.cuda.memory_allocated() / 2**30,
++                    )
++                if _use_safe_logits(k_quant_cast.shape[0]):
++                    logits = _mqa_logits_torch(
++                        q_slice_cast, k_quant_cast, k_scale_cast,
++                        weights[chunk.token_start : chunk.token_end],
++                        chunk.cu_seqlen_ks, chunk.cu_seqlen_ke,
++                    )
++                else:
++                    logits = fp8_mqa_logits_triton(
++                        q_slice_cast,
++                        (k_quant_cast, k_scale_cast),
++                        weights[chunk.token_start : chunk.token_end],
++                        chunk.cu_seqlen_ks,
++                        chunk.cu_seqlen_ke,
++                        clean_logits=False,
++                    )
+             num_rows = logits.shape[0]
+ 
+             # kpool: logits are pool-granular (compress_ratio == index_kpool),
+@@ -700,18 +876,43 @@
+             # tail slot (block * kpool + pos % kpool).
+             if tail_meta is not None:
+                 assert isinstance(tail_meta, DeepseekV32IndexerMetadata)
+-            if tail_meta is None or tail_kv_cache is None:
++            if (tail_meta is None or tail_kv_cache is None
++                    or tail_meta.tail_own_blocks is None
++                    or torch.cuda.is_current_stream_capturing()):
+                 dec_tail_slot = None
+-            elif not use_uniform:
+-                dec_tail_slot = _scatter_decode_tokens_by_request(
+-                    tail_meta.slot_mapping[:num_decode_tokens],
+-                    -1,
+-                    num_requests,
+-                    lmax,
+-                    scatter_idx,
+-                )
+             else:
+-                dec_tail_slot = tail_meta.slot_mapping[:num_decode_tokens].view(shape2)
++                # Recompute the tail slot mapping on-the-fly from Python
++                # ints (immune to GPU memory corruption during CUDA graph
++                # replay) and the positions tensor (correct via weak_ref).
++                _kpool = tail_meta.tail_kpool
++                _own = tail_meta.tail_own_blocks
++                # Cache the tiny GPU tensor on the metadata so the CPU->GPU
++                # transfer happens once per step, not once per kpool layer.
++                _own_t = getattr(tail_meta, '_own_blocks_gpu', None)
++                if _own_t is None or _own_t.shape[0] != num_requests:
++                    _own_t = torch.tensor(
++                        _own, dtype=torch.int64,
++                        device=positions.device)[:num_requests]
++                    tail_meta._own_blocks_gpu = _own_t
++                _pos_i64 = positions[:num_decode_tokens].to(torch.int64)
++                if not use_uniform:
++                    _req_ids = torch.arange(
++                        num_requests, device=positions.device)
++                    # (image port) this build's decode metadata carries no
++                    # query_start_loc; `group_lens` is the same per-request
++                    # decode length used to build scatter_idx above.
++                    _own_exp = _own_t[_req_ids].repeat_interleave(
++                        group_lens[:num_requests].to(torch.int64))
++                    _tail_flat = (
++                        _own_exp[:num_decode_tokens] * _kpool
++                        + _pos_i64 % _kpool)
++                    dec_tail_slot = _scatter_decode_tokens_by_request(
++                        _tail_flat, -1, num_requests, lmax, scatter_idx,
++                    )
++                else:
++                    _own_col = _own_t.unsqueeze(1)  # [B, 1]
++                    _pos_v = _pos_i64.view(shape2)
++                    dec_tail_slot = _own_col * _kpool + _pos_v % _kpool
+             # The compress kernel writes the raw fp8 cache (not the quant view);
+             # pass the underlying kv_cache, not kv_cache_quant_view.
+             if dec_tail_slot is not None:
+@@ -722,6 +923,8 @@
+                 # provided. Inputs are already grouped per request (uniform:
+                 # view; non-uniform: _scatter_decode_tokens_by_request padded to
+                 # [B, lmax]) — no per-token .contiguous() copies needed.
++                _bc("kpool decode main slots", dec_slot, kv_cache.shape[0] * kv_cache.shape[1])
++                _bc("kpool decode tail slots", dec_tail_slot, tail_kv_cache.shape[0] * index_kpool)
+                 kpool_decode_update_and_maybe_write_cache_batched(
+                     kv_cache_raw,
+                     tail_kv_cache,
+@@ -785,16 +988,40 @@
+             if use_fp4_cache
+             else padded_q_quant_decode_tokens
+         )
+-        logits = fp8_fp4_paged_mqa_logits(
+-            (padded_q_quant_cast, padded_q_scale),
+-            kv_cache,
+-            padded_weights[:num_padded_tokens],
+-            seq_lens,
+-            decode_metadata.block_table,
+-            decode_metadata.schedule_metadata,
+-            max_model_len=max_model_len,
+-            clean_logits=False,
+-        )
++        if is_deep_gemm_supported():
++            logits = fp8_fp4_paged_mqa_logits(
++                (padded_q_quant_cast, padded_q_scale),
++                kv_cache,
++                padded_weights[:num_padded_tokens],
++                seq_lens,
++                decode_metadata.block_table,
++                decode_metadata.schedule_metadata,
++                max_model_len=max_model_len,
++                clean_logits=False,
++            )
++        else:
++            # sm80 (no DeepGEMM): Triton paged MQA-logits fallback (Malav-P fork).
++            # Downstream topk reads only up to seq_lens, so size the buffer to
++            # the active batch max rather than the configured model max.
++            from vllm.v1.attention.ops.mqa_logits_triton import (
++                fp8_paged_mqa_logits_triton,
++            )
++
++            active_max_model_len = attn_metadata_narrowed.max_seq_len
++            # Triton fallback expects [NB, BS, 1, HD+4]; squeeze the H=1
++            # heads dim that the 4D BNHC allocator inserts.
++            kv_cache_4d = kv_cache
++            if kv_cache_4d.ndim == 5:
++                kv_cache_4d = kv_cache_4d.squeeze(1)
++            logits = fp8_paged_mqa_logits_triton(
++                padded_q_quant_cast,
++                kv_cache_4d,
++                padded_weights[:num_padded_tokens],
++                seq_lens,
++                decode_metadata.block_table,
++                max_model_len=active_max_model_len,
++                clean_logits=False,
++            )
+         num_rows = logits.shape[0]
+         # kpool: logits are pool-granular -> select topk_tokens//kpool pools,
+         # then expand each pool back to its kpool tokens.
+@@ -807,7 +1034,15 @@
+         else:
+             topk_dst = topk_indices_buffer[:num_padded_tokens, :topk_tokens]
+ 
+-        if current_platform.is_cuda() and select_k in (512, 1024, 2048):
++        # sm8x: the radix persistent_topk kernel returns WRONG indices when the
++        # candidate count lands between k and 2k (found on DSv4 on these cards,
++        # deepseek-v4-cmp170hx patch 0001). Mirror the SM90 gate the sibling
++        # cooperative path carries; sm_80 then takes top_k_per_row_decode.
++        if (
++            current_platform.is_cuda()
++            and select_k in (512, 1024, 2048)
++            and current_platform.has_device_capability(90)
++        ):
+             workspace_manager = current_workspace_manager()
+             (topk_workspace,) = workspace_manager.get_simultaneous(
+                 ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
+@@ -966,8 +1201,15 @@
+         self.skip_k_cache_insert = skip_k_cache_insert
+         self.use_fp4_cache = use_fp4_cache
+         if current_platform.is_cuda() and not has_deep_gemm():
+-            raise RuntimeError(
+-                "Sparse Attention Indexer CUDA op requires DeepGEMM to be installed."
++            if is_deep_gemm_supported():
++                raise RuntimeError(
++                    "Sparse Attention Indexer CUDA op requires DeepGEMM"
++                    " to be installed.")
++            import warnings
++            warnings.warn(
++                "DeepGEMM not found but not required on this GPU "
++                "(SM80) — kpool will use fallback kernels.",
++                stacklevel=2,
+             )
+ 
+     def forward_native(

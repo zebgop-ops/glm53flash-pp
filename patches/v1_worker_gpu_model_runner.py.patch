@@ -1,0 +1,91 @@
+--- a/vllm/v1/worker/gpu/model_runner.py
++++ b/vllm/v1/worker/gpu/model_runner.py
+@@ -24,6 +24,8 @@
+ from typing import Any, NamedTuple
+ 
+ import numpy as np
++import os
++
+ import torch
+ import torch.nn as nn
+ 
+@@ -153,6 +155,29 @@
+ logger = init_logger(__name__)
+ 
+ 
++# glm53-run diagnostic (GLM53_BOUNDS_CHECK=1): verify every KV-group slot mapping stays
++# inside its cache before the forward writes with it; raises a Python error instead of an
++# MMU fault (Xid 31 wedges the driver until reboot). One host sync per step when enabled.
++_GLM53_BOUNDS_CHECK = os.environ.get("GLM53_BOUNDS_CHECK") == "1"
++
++
++def _glm53_check_slot_mappings(tag: str, slot_mappings, kv_cache_config) -> None:
++    if not _GLM53_BOUNDS_CHECK:
++        return
++    for gi, (sm, group) in enumerate(zip(slot_mappings, kv_cache_config.kv_cache_groups)):
++        if sm.numel() == 0:
++            continue
++        cap = kv_cache_config.num_blocks * group.kv_cache_spec.block_size
++        s64 = sm.to(torch.int64)
++        mx, mn = int(s64.max().item()), int(s64.min().item())
++        if mx >= cap or mn < -1:
++            raise RuntimeError(
++                f"GLM53_BOUNDS_CHECK: {tag}: kv group {gi} ({group.layer_names[:2]}...) "
++                f"slot range [{mn}, {mx}] outside capacity {cap} "
++                f"(num_blocks={kv_cache_config.num_blocks}, block_size={group.kv_cache_spec.block_size})"
++            )
++
++
+ class GPUModelRunner(LoRAModelRunnerMixin):
+     def __init__(self, vllm_config: VllmConfig, device: torch.device):
+         self.vllm_config = vllm_config
+@@ -288,6 +313,10 @@
+                 max_num_reqs=self.max_num_reqs,
+                 num_speculative_steps=self.num_speculative_steps,
+                 device=self.device,
++                # MTP-under-PP relay port (vllm#46994 via qwen38-run): only a
++                # speculator proposes draft tokens to relay. Diffusion LLMs also
++                # set num_speculative_steps > 0 but have no speculator.
++                relay_draft_tokens=self.speculative_config is not None,
+             )
+ 
+         # Samplers and decode_query_len created in load_model() after
+@@ -1056,7 +1085,18 @@
+         if self.pp_handler is not None:
+             outputs = self.pp_handler.get_prev_sampled_outputs()
+             if outputs is not None:
++                # Spec decode: scatter the relayed proposed draft tokens into this
++                # rank's state so the next step's combine_sampled_and_draft_tokens
++                # reads real values. Pop before postprocess_sampled (which does not
++                # accept this kwarg). idx_mapping has -1 for excluded/freed reqs.
++                draft_tokens = outputs.pop("draft_tokens", None)
++                idx_mapping = outputs["idx_mapping"]
+                 self.postprocess_sampled(**outputs)
++                if draft_tokens is not None:
++                    valid = idx_mapping >= 0
++                    self.req_states.draft_tokens[idx_mapping[valid]] = draft_tokens[
++                        valid
++                    ]
+ 
+     def add_requests(self, scheduler_output: SchedulerOutput) -> None:
+         for new_req_data in scheduler_output.scheduled_new_reqs:
+@@ -1623,6 +1663,7 @@
+         slot_mappings_by_layer = None
+         if not (dummy_run and skip_attn_for_dummy_run):
+             assert slot_mappings is not None
++            _glm53_check_slot_mappings("target slot mappings#1", slot_mappings, self.kv_cache_config)
+             slot_mappings_by_layer = build_slot_mappings_by_layer(
+                 slot_mappings, self.kv_cache_config
+             )
+@@ -1929,6 +1970,11 @@
+                 mm_inputs=mm_inputs,
+             )
+             self.req_states.draft_tokens[input_batch.idx_mapping] = draft_tokens
++            if self.pp_handler is not None:
++                # Relay the proposed draft tokens to non-last PP ranks so their
++                # next-step combine_sampled_and_draft_tokens reads real values
++                # instead of zero-init (otherwise spec acceptance ~= 0 / garbage).
++                self.pp_handler.broadcast_draft(draft_tokens, input_batch)
+             if self.adaptive_verification is not None:
+                 self.adaptive_verification.record_confidences(
+                     self.speculator.draft_token_confidence_probs, input_batch

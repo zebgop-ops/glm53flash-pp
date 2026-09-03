@@ -1,0 +1,98 @@
+--- a/vllm/models/glm5next/nvidia/model.py
++++ b/vllm/models/glm5next/nvidia/model.py
+@@ -70,6 +70,7 @@
+     PPMissingLayer,
+     init_vllm_registered_model,
+     is_pp_missing_parameter,
++    make_empty_intermediate_tensors_factory,
+     make_layers,
+     maybe_prefix,
+     sequence_parallel_chunk,
+@@ -671,6 +672,21 @@
+             "num_attention_heads must be divisible by world_size"
+         )
+ 
++        # Pipeline parallel (glm53-run overlay). Under mHC the residual is
++        # hc_mult streams [T, n, H] and every non-final layer DEFERS its
++        # hc_post into the next layer's fused post+pre. At a PP boundary the
++        # sending rank materializes that deferred hc_post (exactly what the
++        # final layer does before contracting) and ships the resulting
++        # streams flattened to [T, n*H] as "hidden_states"; the receiving
++        # rank unflattens and its first layer runs the standalone hc_pre on
++        # them (residual = streams), which is the layer-0 path minus the
++        # expand. post/comb are thus consumed, not dropped -- the math is
++        # identical to the single-rank fused path.
++        self.hc_mult = int(getattr(config, "hc_mult", 1) or 1) if config.mhc else 1
++        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
++            ["hidden_states"], config.hidden_size * self.hc_mult
++        )
++
+     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+         return self.embed_tokens(input_ids)
+ 
+@@ -693,9 +709,14 @@
+         else:
+             assert intermediate_tensors is not None
+             hidden_states = intermediate_tensors["hidden_states"]
+-            residual = intermediate_tensors["residual"]
+-            # post/comb (deferred mHC hc_post state) are not propagated across
+-            # PP ranks; the receiving rank's first mHC layer uses standalone pre.
++            if self.hc_mult > 1:
++                # [T, n*H] -> [T, n, H]: the materialized mHC residual streams
++                # (see __init__). The first layer here takes the standalone
++                # hc_pre path with residual = these streams.
++                hidden_states = hidden_states.view(
++                    hidden_states.shape[0], self.hc_mult, -1
++                )
++            residual = None
+             post = None
+             comb = None
+ 
+@@ -709,14 +730,15 @@
+             )
+ 
+         if not get_pp_group().is_last_rank:
+-            # PP is gated off for GLM5Next (no make_empty_intermediate_tensors),
+-            # so this branch is not exercised. post/comb are the deferred
+-            # hc_post state of this rank's last mHC layer; a future PP path
+-            # would need to propagate them, but for now they are dropped (the
+-            # receiving rank's first layer would fall back to standalone pre).
+-            return IntermediateTensors(
+-                {"hidden_states": hidden_states, "residual": residual}
+-            )
++            if post is not None:
++                # Materialize this rank's last layer's deferred hc_post so the
++                # next rank receives the true residual streams [T, n, H].
++                hidden_states = self._active_layers[-1].hc_post(
++                    hidden_states, residual, post, comb
++                )
++            if self.hc_mult > 1:
++                hidden_states = hidden_states.reshape(hidden_states.shape[0], -1)
++            return IntermediateTensors({"hidden_states": hidden_states})
+ 
+         if self.is_sequence_parallel:
+             hidden_states = sp_all_gather(hidden_states)[:full_num_tokens]
+@@ -912,6 +934,7 @@
+         self.logits_processor = LogitsProcessor(
+             self.config.vocab_size, scale=logit_scale
+         )
++        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+ 
+     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+         return self.model.embed_input_ids(input_ids)
+@@ -1062,9 +1085,12 @@
+                 architectures=["Glm5NextForCausalLM"],
+             )
+ 
+-        # Glm5NextForCausalLM does not implement make_empty_intermediate_tensors,
+-        # so pipeline parallelism is gated off (consistent with the text-only
+-        # model) and we intentionally do not alias it here.
++        # Pipeline parallel (glm53-run overlay): alias the hook exactly as
++        # Glm4vForConditionalGeneration does; Glm4v's forward already passes
++        # intermediate_tensors through to the language model.
++        self.make_empty_intermediate_tensors = (
++            self.language_model.make_empty_intermediate_tensors
++        )
+ 
+     def get_encoder_cudagraph_config(self):
+         # The forked vision tower (multimodal.py) has no abs-pos embeddings, so its

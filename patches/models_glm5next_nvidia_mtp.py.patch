@@ -1,0 +1,94 @@
+--- a/vllm/models/glm5next/nvidia/mtp.py
++++ b/vllm/models/glm5next/nvidia/mtp.py
+@@ -21,7 +21,12 @@
+ )
+ from vllm.model_executor.models.deepseek_mtp import SharedHead
+ from vllm.model_executor.models.deepseek_v2 import DeepseekV2MixtureOfExperts
+-from vllm.model_executor.models.utils import maybe_prefix
++from vllm.model_executor.models.interfaces import SupportsPP
++from vllm.logger import init_logger
++from vllm.model_executor.models.utils import (
++    make_empty_intermediate_tensors_factory,
++    maybe_prefix,
++)
+ from vllm.platforms import current_platform
+ from vllm.sequence import IntermediateTensors
+ 
+@@ -35,6 +40,9 @@
+ from .ops.fused_eh_norm import fused_eh_norm
+ 
+ 
++logger = init_logger(__name__)
++
++
+ class Glm5NextMultiTokenPredictorLayer(nn.Module):
+     def __init__(self, vllm_config: VllmConfig, prefix: str) -> None:
+         super().__init__()
+@@ -217,15 +225,40 @@
+         )
+ 
+ 
+-class Glm5NextMTP(nn.Module, DeepseekV2MixtureOfExperts):
++class Glm5NextMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
+     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
+         super().__init__()
+         self.config = vllm_config.model_config.hf_config
+         self.quant_config = vllm_config.quant_config
++        # AutoRound/INC checkpoints (glm53-run overlay): the INC resolver marks
++        # a module quantized only when its name starts with one of
++        # `block_name_to_quantize` (the checkpoint says
++        # "model.language_model.layers", mapped to the wrapper's
++        # "language_model.model.layers"). The drafter is built standalone under
++        # "<prefix>model.layers.<N>", so its routed experts would be created
++        # UNquantized while the checkpoint stores them as int4 (qweight) ->
++        # KeyError on w2_qweight at load. Extend the block list with the
++        # drafter's own layers prefix; the BF16 sub-modules (self_attn,
++        # shared_experts, eh_proj, enorm, hnorm, shared_head, ...) stay
++        # unquantized through the prefix-agnostic regex entries of extra_config.
++        _bn = getattr(self.quant_config, "block_name_to_quantize", None)
++        if self.quant_config is not None and _bn:
++            _bn = [_bn] if isinstance(_bn, str) else list(_bn)
++            _mtp_layers_prefix = maybe_prefix(prefix, "model.layers")
++            if not any(_mtp_layers_prefix.startswith(b) for b in _bn):
++                self.quant_config.block_name_to_quantize = _bn + [_mtp_layers_prefix]
+         self.model = Glm5NextMultiTokenPredictor(
+             vllm_config=vllm_config, prefix=maybe_prefix(prefix, "model")
+         )
+         self.set_moe_parameters()
++        # Pipeline parallel (glm53-run overlay): the draft model config is
++        # verified against the PP gate (`supports_pp`), which requires this
++        # attribute plus an `intermediate_tensors` kwarg on forward (already
++        # present). The drafter only ever runs on the last PP rank, so these
++        # buffers are never used for a real transfer (same as Qwen3NextMTP).
++        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
++            ["hidden_states", "residual"], self.config.hidden_size
++        )
+ 
+     def set_moe_parameters(self):
+         self.num_moe_layers = self.config.num_nextn_predict_layers
+@@ -334,6 +367,25 @@
+             if name.startswith("model.language_model."):
+                 name = name.replace("model.language_model.", "model.", 1)
+             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
++            if spec_layer is None and name == "model.embed_tokens.weight":
++                # Pipeline parallel (glm53-run overlay): load_eagle_model skips
++                # embedding sharing under PP, so the drafter keeps a PRIVATE
++                # embed_tokens -- and this checkpoint ships no MTP embedding
++                # (layer 45 has eh_proj/enorm/hnorm/shared_head.norm only). The
++                # target's table lives on PP rank 0, not on the last rank where
++                # the drafter runs, so without this branch the drafter embeds
++                # tokens with random-init weights (measured: 6% acceptance).
++                # Load the target embedding straight from the checkpoint.
++                if name in params_dict:
++                    param = params_dict[name]
++                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
++                    weight_loader(param, loaded_weight)
++                    loaded_params.add(name)
++                    logger.info(
++                        "MTP drafter: loaded private embed_tokens from the target "
++                        "checkpoint (PP: no embedding sharing on the last rank)."
++                    )
++                continue
+             if spec_layer is None:
+                 continue
+             name = self._rewrite_spec_layer_name(spec_layer, name)
