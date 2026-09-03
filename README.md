@@ -76,6 +76,15 @@ Each item cost a boot (about 4.5 minutes here) to find. Patches are per file in
 6. **Speed.** The PP4 stages are CPU-dispatch-bound under piecewise CUDA graphs (same
    finding as the Qwen sister project); full graphs took single-stream decode from 45 to
    66–70 tok/s. MTP depth 4 measured worse than 3 at every concurrency.
+7. **Constant-token loops in multi-turn chat** (`Think!locklocklock…`). Token 1023 is what
+   the sampler emits for all-NaN logits, the same signature as the Qwen sister project's
+   `duct` loops: under PP the mamba/KDA spec-decode context captured raw pointers to the
+   per-step *gathered* block tables and a non-last rank's deferred postprocess walked them
+   with a stale batch mapping, corrupting recurrent state through other requests' block
+   ids. Fix ported from qwen38-flashnext-pp patch 0010: the context is handed the
+   per-request *source* tables and the copy kernels index by request slot. Trigger is
+   prefix-cache hits + several busy slots + MTP, which a chat session produces naturally
+   and the fresh-prompt soaks did not.
 
 ## Known gaps
 
@@ -95,8 +104,9 @@ serve/make-patched-tree.sh      builds the overlay from the image + patches, ver
 serve/extract-image-files.sh    pull pristine files out of the image without running it
 patches/                        unified diffs, one per overlaid vLLM file
 ported-files/                   the overlay as whole files (3 are new files from the fork)
-tools/                          smoke, bench, needle, soak+detect, spec_stats, mmtest,
-                                mmvideo, bracket, kvbudget, kernel_test*
+tools/                          smoke, bench, needle, soak+detect, hitpath (multi-turn
+                                cache-hit soak), spec_stats, mmtest, mmvideo, bracket,
+                                kvbudget, kernel_test*
 FINDINGS.md                     the bugs, the evidence, the dead ends
 RESULTS.md                      every number, with the configuration it was measured on
 ```

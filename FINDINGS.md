@@ -162,6 +162,43 @@ vision-model diffs against the PR head are cosmetic; the rework is in
 `vllm/multimodal/video.py` (2256 → 1287 lines) and a new OpenCV decoder, which post-date
 the image.
 
+## 9. Constant-token loops in production chat (state corruption under PP + MTP + cache hits)
+
+2026-09-03, first day of real multi-turn use (prefix-cache hit rate 85 %): one response
+degenerated into `Think!locklocklock…` and ran to its token limit; the next request was
+fine. `lock` is token id **1023** in this vocabulary, and the Qwen investigation
+(qwen38-flashnext-pp FINDINGS, Addendum 11) established by logits dumps that id 1023 is
+what vLLM's sampler deterministically emits for an all-NaN logits row (`duct` was 1023 in
+Qwen's vocabulary). So this is NaN generation in the target forward, not a model quirk.
+
+Mechanism (proven on the Qwen project by instrumentation and ablation, Addenda 15, 16, 19,
+22; the same stock code is in this image): `MambaSpecDecodeGPUContext` captures the
+`data_ptr()` of the block tables it is handed *once*, and the V2 runner hands it the
+per-step **gathered** tables (batch order). Under PP, `pp_size + 1` steps are in flight and
+later steps re-gather into those same buffers, while a non-last rank's deferred
+postprocess runs `pp_size` steps after its batch was gathered. Its state-copy kernels then
+walk the *current* tables with a *stale* batch mapping, reading and writing KDA state
+through other requests' (freed or reallocated) block ids. Corrupted state produces NaN
+logits, and a NaN request never recovers.
+
+Why the soaks missed it: fresh random prompts at 4 streams give no prefix-cache hits; with
+cache hits the mamba tables are wide and re-gathered every step, which is the exposed
+window. A chat session re-sends the whole conversation each turn and is exactly that.
+
+Fix (overlay, from qwen38 patch 0010, two hunks apply with a 5-line offset): the runner
+passes `tuple(bt.gpu for bt in self.block_tables.block_tables)` (the per-request source
+tables, stable pointers, req-indexed, mutated only by stream-ordered staged writes) to
+`preprocess_state`, and the two copy kernels in `mamba_utils.py` index rows by `req_idx`
+instead of the batch row. The block-table pool (qwen38 patch 0009) is deliberately *not*
+ported: it is optional with 0010 and is a hazard under full CUDA graphs (Addendum 22),
+which this deployment uses. The divisor fix (qwen38 patch 0012) is not needed here: in
+`align` mode this image sets `mamba_block_size = block_size`.
+
+Validation tool: `tools/hitpath.py` (N conversations × turns over a shared ~20k-token
+document, concurrent, sampled, planted-code recall, loop detector). Baseline before the
+fix is the production incident; the Qwen baseline for the same trigger was 14–27 % of
+responses.
+
 ## 8. Operational lessons
 
 - Do not edit the launcher while it is executing: bash reads scripts incrementally, and

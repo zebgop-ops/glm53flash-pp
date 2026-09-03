@@ -1617,9 +1617,20 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             # boundaries before the forward. Runs only on real batches, and
             # before model_state.prepare_attn gathers num_accepted_tokens so the
             # boundary reset is visible to the attention metadata.
+            # FIX (glm53 overlay, ported from zebgop-ops/qwen38-flashnext-pp
+            # patch 0010): give the mamba spec-decode ctx the SOURCE
+            # per-request-slot block tables (stable data_ptr, req-indexed,
+            # stream-ordered staged writes) instead of the per-step gathered
+            # views. The ctx captures raw pointers ONCE; under PP the gathered
+            # views are re-gathered by later in-flight steps and a non-last
+            # rank's deferred postprocess then walks the CURRENT tables with a
+            # STALE batch mapping -> KDA state read/written through other
+            # requests' (freed/reallocated) block ids -> NaN logits -> the
+            # sampler emits token 1023 ('lock') forever. Kernels in
+            # mamba_utils.py index rows by req_idx to match.
             self.model_state.preprocess_state(
                 input_batch,
-                block_tables,
+                tuple(bt.gpu for bt in self.block_tables.block_tables),
                 self.kv_cache_config,
                 self.req_states.num_computed_tokens.gpu,
             )
