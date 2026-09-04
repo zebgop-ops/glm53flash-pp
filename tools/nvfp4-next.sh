@@ -1,7 +1,7 @@
 #!/bin/bash
 # One decisive post-reboot sequence for GLM53U (run on a CLEAN driver only; any GPU fault degrades
 # every card until the next reboot, so results after a fault are meaningless):
-#   1. replica under the ceiling: 36 GiB filler + full Marlin prep of layers 3-12 (real tensors,
+#   1. replica of rank 0: 10 GiB filler (its 10 expert layers are 38 GiB of the ~48 GiB resident) + full Marlin prep of layers 3-12 (real tensors,
 #      overlay's chunked scale factor) on GPU 3, synchronous launches.  Pass -> the overlay is
 #      sound and rank 0's ~48 GiB resident + ~4.5 GiB transient is far from the ~63 GiB fault zone.
 #   2. only then: boot GLM53U (async, GLM53_MARLIN_DIAG=1 logs the scale tensors per layer),
@@ -9,8 +9,8 @@
 set -uo pipefail
 cd /home/r/glm53-run
 OV=/home/r/glm53-run/patch/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py
-echo "== step 1: replica (GPU 3, FILL 36, layers 3-12) =="
-timeout 1500 docker run --rm -i --gpus '"device=3"' -e CUDA_LAUNCH_BLOCKING=1 -e FILL_GB=36 -e LAYERS=3-12 \
+echo "== step 1: replica (GPU 3, FILL 10, layers 3-12; peak ~53 GiB, well under the ~63 GiB fault ceiling) =="
+timeout 1500 docker run --rm -i --gpus '"device=3"' -e CUDA_LAUNCH_BLOCKING=1 -e FILL_GB=10 -e LAYERS=3-12 \
   -v /home/r/.cache/huggingface:/hf:ro -v /home/r/glm53-run/models/glm53-uncensored-nvfp4-mtp:/model:ro \
   -v $OV:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py:ro \
   --entrypoint python3 vllm/vllm-openai:glm53-flash - G < nvfp4_marlin_test.py 2>&1 | grep -v "^INFO\|^WARNING\|^\[W\|real tensors:" | tail -14 | tee stageG-clean.log
