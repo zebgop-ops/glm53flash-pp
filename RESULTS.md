@@ -29,6 +29,21 @@ Partition 13,11,11,10 · MTP depth 3 · `FULL_AND_PIECEWISE` CUDA graphs ·
 | per-rank memory (weights + non-torch) | 44.7 / 45.8 / 45.8 / 48.2 GiB; rank 3 at 63.1/64 GiB with KV |
 | boot | ~95 s weight load, ~100 s graph capture, ~5 min to ready |
 
+## GLM53U: orcarouter/GLM-5.3-Flash-Uncensored-NVFP4 + transplanted MTP (first day)
+
+Partition 14,11,11,9 · MTP depth 3 (RedHat's layer 45, FP8 experts) · `FULL_AND_PIECEWISE` ·
+`--max-model-len 262144` · utilization 0.95 · allocator cap 0.965 · images on.
+
+| metric | value |
+|---|---|
+| per-rank consumed (weights + non-torch) | 50.3 / 47.6 / 47.6 / 49.0 GiB; peak activation ~4.7 GiB per rank |
+| KV pool | 1,310,720 tokens (5.0× a full 262k request); tightest rank is rank 0 (vision tower + embedding), per-rank budgets gain <0.5 GiB |
+| decode, 1 stream | 59–67 tok/s |
+| decode, 4 streams | 166 tok/s (41.6 per stream) |
+| MTP acceptance (base head on the abliterated target) | 49 %; 75 / 48 / 25 % by position; ~2.5 tokens per step |
+| image test | exact ("Blue square, upper left / Red circle, lower right") |
+| boot | ~100 s weight load, ~6 min to ready |
+
 ## How the numbers moved
 
 | step | context | KV pool | decode 1 stream | decode 4 streams | notes |

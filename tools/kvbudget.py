@@ -4,12 +4,19 @@ Reads 'Available KV cache memory: X GiB' per Worker_PP<i> from `docker logs glm5
 subtracts a safety margin (default 0.5 GiB; 1.0 GiB on the last rank, which hosts the MTP
 drafter and its transient scratch), and prints the env assignment plus the expected gain vs
 the tightest-rank value that vLLM applies to every rank by default."""
-import re, subprocess, sys
+import os, re, subprocess, sys
 GiB = 2**30
+CONTAINER = os.environ.get("GLM53_CONTAINER", "glm53flash-pp")   # e.g. glm53nvfp4-pp for GLM53U
 margin = float(sys.argv[1]) if len(sys.argv) > 1 else 0.5
 last_margin = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
-log = subprocess.run(["docker", "logs", "glm53flash-pp"], capture_output=True, text=True).stdout + \
-      subprocess.run(["docker", "logs", "glm53flash-pp"], capture_output=True, text=True).stderr
+_r = subprocess.run(["docker", "logs", CONTAINER], capture_output=True, text=True)
+log = _r.stdout + _r.stderr
+# If the worker overlay capped the allocator (GLM53_MEM_CAP_FRACTION), vLLM's "maximize" suggestion
+# still counts memory above the cap as free; subtract the capped-off slice from every rank's maximum.
+_cap = re.search(r"allocator capped at ([0-9.]+) GiB", log)
+_total = re.search(r"total capacity of ([0-9.]+) GiB", log)
+CAP_SLICE = (float(_total.group(1)) - float(_cap.group(1))) if (_cap and _total) else (63.53 - float(_cap.group(1)) if _cap else 0.0)
+if CAP_SLICE: print(f"allocator cap detected: subtracting {CAP_SLICE:.2f} GiB from every rank's maximum")
 avail = {}
 # vLLM logs 'Available KV cache memory' on rank 0 only; every rank logs its own
 # 'Replace gpu_memory_utilization config with `--kv-cache-memory=<bytes>`' suggestion.
@@ -21,7 +28,7 @@ for m in re.finditer(r"Worker_PP(\d)([^\n]*)", log):
     if vals:
         r = int(m.group(1))
         util_eq[r] = int(vals[0]) / GiB
-        avail[r] = int(vals[-1]) / GiB
+        avail[r] = int(vals[-1]) / GiB - CAP_SLICE
 if util_eq:
     print("util-equivalent KV per rank (GiB, what the current boot uses on the tightest rank):",
           {r: round(v, 2) for r, v in sorted(util_eq.items())})

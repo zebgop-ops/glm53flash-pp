@@ -199,6 +199,56 @@ document, concurrent, sampled, planted-code recall, loop detector). Baseline bef
 fix is the production incident; the Qwen baseline for the same trigger was 14–27 % of
 responses.
 
+## 10. NVFP4 checkpoint on sm_80: the memory ceiling
+
+Bringing up `orcarouter/GLM-5.3-Flash-Uncensored-NVFP4` (experts-only NVFP4, compressed-tensors,
+177 GiB; MTP block dropped by the publisher) cost three reboots and produced the most
+useful hardware finding of the project.
+
+**Symptom.** Every rank died at load time with an illegal memory access inside
+`process_weights_after_loading` of the first MoE layer, in `prepare_nvfp4_moe_layer_for_marlin`.
+The Marlin FP4 lane is selected on sm_80 (`'MARLIN' NvFp4 MoE backend`); the weights had loaded
+in 55 s.
+
+**Ruled out.** The repack kernel (identical call to the int4 path's, clean in isolation with
+the real layer-3 tensors); a dense-vs-batched repack difference (the batched op is a Python
+loop over the same kernel); the allocator mode (vLLM sets none; expandable segments proved
+fine on a clean card); high addresses per se (a healthy card writes and reads back all 63 GiB).
+
+**Attribution.** A boot with `CUDA_LAUNCH_BLOCKING=1` moved the fault to plain elementwise
+ops in `_nvfp4_compute_scale_factor` (`.float()` of the bf16 scale tensor, a masked max), two
+ranks naming adjacent lines. That function indexes the `[288, 4096, 256]` scale tensor with a
+boolean mask; on a 3-D tensor that builds an int64 `[N, 3]` index of **6.75 GiB**, plus a 1.2 GiB
+float copy and the mask: ~9.5 GiB of transient per expert layer on a rank already holding ~48 GiB.
+A single-GPU replica that reproduced the resident footprint faulted in exactly the same place
+once the PyTorch peak crossed ~63.2 GiB, on two clean cards, while 1 GiB sweeps to the same
+top OOM cleanly. **On these VRAM-unlocked CMP 170HX cards, allocations that land near the top
+of the 63.5 GiB card can fault (Xid 31) instead of raising OOM, and the fault degrades every
+GPU in the box until reboot** (a neighbour card faulted at 40 GiB of use on a step a clean card
+does at 57 GiB). This retroactively explains the long-context faults of section 4: high usage
+plus a large transient, cured by chunking the transient.
+
+**Fixes.** (1) `marlin_utils_fp4.py`: the scale factor is computed per expert slice (megabytes
+of transient; verified equal to the stock formula). (2) `gpu_worker.py`: `GLM53_MEM_CAP_FRACTION`
+calls `torch.cuda.set_per_process_memory_fraction`, so anything that would reach the fault
+zone raises a clean `OutOfMemoryError` instead; the NVFP4 wrapper sets 0.965 (61.3 GiB). It
+proved itself on the next boot: rank 3 OOM'd cleanly on the FP8 drafter's 4.5 GiB repack
+transient instead of wedging the box. (3) Partition `14,11,11,9` and utilization 0.95: each
+expert layer costs 4.2 GiB here, rank 3 carries ~10 GiB of extras (lm_head, the 7.6 GB FP8
+drafter, its private embedding), and every rank profiles ~4.7 GiB of peak activation.
+
+**MTP transplant.** The publisher dropped layer 45; `RedHatAI/GLM-5.3-Flash-NVFP4` is
+byte-format-identical and ships it (`model_mtp.safetensors`, FP8-block experts, served through
+Marlin FP8 on sm_80). `tools/make-nvfp4-mtp-dir.py` builds a directory of container-path
+symlinks plus a merged index and RedHat's config (which also carries the `linear_*` KDA
+fields and the layer-45 quant group). The base model's drafter on the abliterated target
+accepts 75/48/25 % by position, indistinguishable from the base pair's 78/49/25 %: drafts are
+verified by the target, so only speed was ever at stake, and none was lost.
+
+**Rule for this box.** Keep the PyTorch peak at or below ~61.5 GiB per card; treat any
+first fault in a boot cycle as invalidating every later GPU result until reboot; run one
+decisive experiment per reboot (`tools/nvfp4-next.sh` is that sequence).
+
 ## 8. Operational lessons
 
 - Do not edit the launcher while it is executing: bash reads scripts incrementally, and

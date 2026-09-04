@@ -85,6 +85,16 @@ Each item cost a boot (about 4.5 minutes here) to find. Patches are per file in
    per-request *source* tables and the copy kernels index by request slot. Trigger is
    prefix-cache hits + several busy slots + MTP, which a chat session produces naturally
    and the fresh-prompt soaks did not.
+8. **A second checkpoint, NVFP4 on Ampere** (`orcarouter/GLM-5.3-Flash-Uncensored-NVFP4`,
+   served as `GLM53Flash-Uncensored` via `serve/run-glm53flash-uncensored-nvfp4-pp4.sh`).
+   NVFP4 runs on sm_80 through vLLM's Marlin FP4 lane, but its load-time scale-factor step
+   materialises ~9.5 GB of transient per expert layer (a boolean-mask index over a 3-D
+   tensor builds an int64 `[N,3]` index of 6.75 GiB), and **on these VRAM-unlocked cards an
+   allocation near the top of the 63.5 GiB card faults instead of OOM-ing**, wedging every GPU
+   until reboot. The overlay computes the factor per expert, caps PyTorch's allocator below
+   the fault zone (`GLM53_MEM_CAP_FRACTION`, so the worst case is a clean OOM), and the
+   repo-dropped MTP block is transplanted from `RedHatAI/GLM-5.3-Flash-NVFP4`
+   (`tools/make-nvfp4-mtp-dir.py`): acceptance 75/48/25 %, the base head's numbers.
 
 ## Known gaps
 
@@ -100,13 +110,15 @@ Each item cost a boot (about 4.5 minutes here) to find. Patches are per file in
 
 ```
 serve/run-glm53flash-pp4.sh     production launcher (all knobs documented inline)
+serve/run-glm53flash-uncensored-nvfp4-pp4.sh  wrapper for the NVFP4 checkpoint (partition, cap, model dir)
 serve/make-patched-tree.sh      builds the overlay from the image + patches, verifies it
 serve/extract-image-files.sh    pull pristine files out of the image without running it
 patches/                        unified diffs, one per overlaid vLLM file
 ported-files/                   the overlay as whole files (3 are new files from the fork)
 tools/                          smoke, bench, needle, soak+detect, hitpath (multi-turn
                                 cache-hit soak), spec_stats, mmtest, mmvideo, bracket,
-                                kvbudget, kernel_test*
+                                kvbudget, kernel_test*, make-nvfp4-mtp-dir (MTP transplant),
+                                nvfp4_marlin_test / memsweep / memtop (memory-ceiling forensics)
 FINDINGS.md                     the bugs, the evidence, the dead ends
 RESULTS.md                      every number, with the configuration it was measured on
 ```
