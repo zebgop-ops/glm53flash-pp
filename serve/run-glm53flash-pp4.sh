@@ -78,6 +78,12 @@ PORT=${GLM53_PORT:-8002}
 IMG=${GLM53_IMG:-vllm/vllm-openai:glm53-flash}
 HFCACHE=${GLM53_HF:-/home/r/.cache/huggingface}
 SNAPSHOT=${GLM53_SNAPSHOT:-5eee1846f0321058ed73745f9aa16f2aaf0fc0a0}
+INTEL_MODEL="/hf/hub/models--Intel--GLM-5.3-Flash-W4A16-AutoRound/snapshots/$SNAPSHOT"
+# GLM53_MODEL: container path of a different checkpoint (e.g. another GLM-5.3-Flash quant under /hf/hub/...).
+# The KV presets below are measured for the Intel W4A16 checkpoint ONLY and are skipped for any other model
+# (an over-committed rank faults instead of OOM-ing cleanly) -> a new model boots with plain util sizing;
+# derive its own budgets with kvbudget.py from that discovery boot.
+MODEL_OVERRIDE=${GLM53_MODEL:-}
 # 45 decoder layers: 0-2 dense (BF16, ~0.35 GiB each), 3-44 MoE (~4.1 GiB each, int4
 # experts); rank 0 also holds embed (1.3 GiB), last rank holds lm_head (1.3 GiB) and,
 # with MTP, the drafter layer (~4.1 GiB). 13,11,11,10 -> ~42/45/45/46 GiB weights.
@@ -107,7 +113,7 @@ PATCHDIR=${GLM53_PATCH:-/home/r/glm53-run/patch}
 # depth or multimodal settings: a budget that over-commits a rank faults instead of raising a
 # clean OOM.
 P0=; P1=; P2=; P3=
-if [ "${GLM53_KV_PRESET:-1}" = "1" ] && [ "$PARTITION" = "13,11,11,10" ] && [ "$SPEC_N" = "3" ] \
+if [ "${GLM53_KV_PRESET:-1}" = "1" ] && [ -z "$MODEL_OVERRIDE" ] && [ "$PARTITION" = "13,11,11,10" ] && [ "$SPEC_N" = "3" ] \
    && [ "$MM" = '{"image":64,"video":0}' ]; then
   case "$MAXLEN" in
     262144) P0=15289155584; P1=14076575744; P2=14046167040; P3=11065227264 ;;  # maxima 14.74/13.61/13.58/11.31 GiB -> pool 1,801,083 (validated 2026-09-03)
@@ -118,7 +124,7 @@ KV0=${GLM53_KV0:-$P0}; KV1=${GLM53_KV1:-$P1}; KV2=${GLM53_KV2:-$P2}; KV3=${GLM53
 KV_ENV=(${KV0:+-e VLLM_KV_CACHE_MEMORY_RANK0=$KV0} ${KV1:+-e VLLM_KV_CACHE_MEMORY_RANK1=$KV1} ${KV2:+-e VLLM_KV_CACHE_MEMORY_RANK2=$KV2} ${KV3:+-e VLLM_KV_CACHE_MEMORY_RANK3=$KV3})
 
 V=/usr/local/lib/python3.12/dist-packages/vllm
-MODEL="/hf/hub/models--Intel--GLM-5.3-Flash-W4A16-AutoRound/snapshots/$SNAPSHOT"
+MODEL=${MODEL_OVERRIDE:-$INTEL_MODEL}
 
 # Overlay: every file under $PATCHDIR/vllm/ is mounted read-only over the same path in
 # the image's vllm package.
