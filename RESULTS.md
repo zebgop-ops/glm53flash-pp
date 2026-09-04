@@ -42,6 +42,7 @@ Partition 14,11,11,9 · MTP depth 3 (RedHat's layer 45, FP8 experts) · `FULL_AN
 | decode, 4 streams | 166 tok/s (41.6 per stream) |
 | MTP acceptance (base head on the abliterated target) | 49 %; 75 / 48 / 25 % by position; ~2.5 tokens per step |
 | image test | exact ("Blue square, upper left / Red circle, lower right") |
+| hit-path soak (12 conversations × 6 turns, 6 concurrent, temperature 1.0, cache hits) | 0 loops / 72 responses, **12/12** planted-code recalls (the abliterated model relays the code the base model refused as "injected content") |
 | boot | ~100 s weight load, ~6 min to ready |
 
 ## How the numbers moved
