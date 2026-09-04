@@ -75,6 +75,7 @@
 
 NAME=${GLM53_NAME:-glm53flash-pp}
 PORT=${GLM53_PORT:-8002}
+SERVED=${GLM53_SERVED:-GLM53Flash}      # --served-model-name (the NVFP4 wrapper serves GLM53Flash-Uncensored)
 IMG=${GLM53_IMG:-vllm/vllm-openai:glm53-flash}
 HFCACHE=${GLM53_HF:-/home/r/.cache/huggingface}
 SNAPSHOT=${GLM53_SNAPSHOT:-5eee1846f0321058ed73745f9aa16f2aaf0fc0a0}
@@ -84,6 +85,10 @@ INTEL_MODEL="/hf/hub/models--Intel--GLM-5.3-Flash-W4A16-AutoRound/snapshots/$SNA
 # (an over-committed rank faults instead of OOM-ing cleanly) -> a new model boots with plain util sizing;
 # derive its own budgets with kvbudget.py from that discovery boot.
 MODEL_OVERRIDE=${GLM53_MODEL:-}
+# GLM53_MODEL_DIR: HOST directory (e.g. a composite dir built by make-nvfp4-mtp-dir.py, symlinks in /hf
+# container paths) mounted read-only at /model and served from there. Implies the same preset skip.
+MODEL_DIR=${GLM53_MODEL_DIR:-}
+if [ -n "$MODEL_DIR" ]; then MODEL_OVERRIDE=/model; MODEL_DIR_MOUNT=(-v "$MODEL_DIR:/model:ro"); else MODEL_DIR_MOUNT=(); fi
 # 45 decoder layers: 0-2 dense (BF16, ~0.35 GiB each), 3-44 MoE (~4.1 GiB each, int4
 # experts); rank 0 also holds embed (1.3 GiB), last rank holds lm_head (1.3 GiB) and,
 # with MTP, the drafter layer (~4.1 GiB). 13,11,11,10 -> ~42/45/45/46 GiB weights.
@@ -136,7 +141,8 @@ if [ -d "$PATCHDIR/vllm" ]; then
   done < <(find "$PATCHDIR/vllm" -type f -name '*.py' | sort)
 fi
 
-for c in dsv4-a100 qwen38-pp; do
+for c in dsv4-a100 qwen38-pp glm53flash-pp glm53nvfp4-pp; do
+  [ "$c" = "$NAME" ] && continue   # the same server restarting is fine; any OTHER server holds the cards
   if docker inspect -f '{{.State.Running}}' $c 2>/dev/null | grep -q true; then
     echo "$c is running and holds the GPUs. Stop it first." >&2; exit 1
   fi
@@ -177,9 +183,10 @@ docker run -d --name "$NAME" --gpus "$([ "$GPU_ORDER" = all ] && echo all || ech
   ${GLM53_SAFE_GATHER:+-e GLM53_SAFE_GATHER=1} \
   ${GLM53_SAFE_LOGITS:+-e GLM53_SAFE_LOGITS=$GLM53_SAFE_LOGITS} ${GLM53_SAFE_LOGITS_N:+-e GLM53_SAFE_LOGITS_N=$GLM53_SAFE_LOGITS_N} \
   -v "$HFCACHE":/hf:ro \
+  "${MODEL_DIR_MOUNT[@]}" \
   "${MOUNTS[@]}" \
   -p "$PORT":8000 \
-  "$IMG" "$MODEL" --served-model-name GLM53Flash \
+  "$IMG" "$MODEL" --served-model-name "$SERVED" \
   --pipeline-parallel-size "$PP" \
   --attention-backend TRITON_MLA_SPARSE --kv-cache-dtype bfloat16 \
   --gpu-memory-utilization "$UTIL" --max-model-len "$MAXLEN" --max-num-seqs "$SEQS" \
