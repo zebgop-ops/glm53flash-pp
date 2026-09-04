@@ -1,0 +1,50 @@
+--- a/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py
++++ b/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py
+@@ -48,13 +48,40 @@
+     if a_dtype is not None and a_dtype == torch.half:
+         return 1.0
+ 
+-    ws_float = marlin_scales.float() * (2**7)
+-    nonzero_mask = ws_float > 0
+-    if nonzero_mask.any():
+-        max_val = ws_float[nonzero_mask].max()
+-        if max_val < 448 * (2**7):
+-            sf = (448 * (2**7) / max_val).log2().floor().exp2()
+-            return sf.item()
++    # glm53 overlay (sm_80 / CMP 170HX): the stock version materialises a float32
++    # copy of the whole [E, 2N, K/16] scale tensor (1.2 GB for GLM-5.3-Flash) plus a
++    # boolean mask and a masked gather of the same size. In situ (rank holding ~45 GB
++    # of weights) the first of those kernels raised an illegal memory access on
++    # every rank, while the identical call on the identical tensors passes in
++    # isolation. Compute the same maximum per leading slice instead (a few MB of
++    # transient per step) and log what we were handed, so a recurrence names the
++    # tensor rather than the kernel.
++    import os as _os
++    if _os.environ.get("GLM53_MARLIN_DIAG"):
++        import torch.cuda as _cuda
++        logger.info(
++            "nvfp4 scale-factor input: shape=%s stride=%s dtype=%s contiguous=%s "
++            "device=%s data_ptr=0x%x storage_bytes=%d | allocated=%.2f GiB reserved=%.2f GiB",
++            tuple(marlin_scales.shape), marlin_scales.stride(), marlin_scales.dtype,
++            marlin_scales.is_contiguous(), marlin_scales.device, marlin_scales.data_ptr(),
++            marlin_scales.untyped_storage().nbytes(),
++            _cuda.memory_allocated(marlin_scales.device) / 2**30,
++            _cuda.memory_reserved(marlin_scales.device) / 2**30,
++        )
++    max_val = None
++    if marlin_scales.dim() == 0:
++        slices = [marlin_scales.reshape(1)]
++    else:
++        slices = marlin_scales.unbind(0) if marlin_scales.shape[0] > 1 else [marlin_scales]
++    for sl in slices:
++        ws_float = sl.float() * (2**7)
++        pos = ws_float[ws_float > 0]
++        if pos.numel():
++            m = pos.max()
++            max_val = m if max_val is None else torch.maximum(max_val, m)
++    if max_val is not None and max_val < 448 * (2**7):
++        sf = (448 * (2**7) / max_val).log2().floor().exp2()
++        return sf.item()
+     return 1.0
+ 
+ 

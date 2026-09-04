@@ -58,10 +58,10 @@ def C():
     w2s = (torch.rand(E, K, N // 16, device=dev) * 2).to(torch.float8_e4m3fn)
     g13 = torch.rand(E, device=dev) + 0.5; g2 = torch.rand(E, device=dev) + 0.5
     return prep(w13, w13s, 1.0 / g13, w2, w2s, 1.0 / g2)
-def load_layer3():
+def load_layer3(layer=3):
     from safetensors import safe_open
     idx = json.load(open("/model/model.safetensors.index.json"))["weight_map"]
-    pre = "model.language_model.layers.3.mlp.experts."
+    pre = f"model.language_model.layers.{layer}.mlp.experts."
     names = {f"{pre}{e}.{m}.{s}": (e, m, s) for e in range(E) for m in ("gate_proj", "up_proj", "down_proj")
              for s in ("weight_packed", "weight_scale", "weight_global_scale")}
     byfile = {}
@@ -93,7 +93,22 @@ def F():
     layer.w2_weight_scale = torch.nn.Parameter(torch.rand(E, K // 128, N // 128, device=dev), requires_grad=False)
     prepare_moe_fp8_layer_for_marlin(layer, size_k_first=True) if "size_k_first" in prepare_moe_fp8_layer_for_marlin.__code__.co_varnames else prepare_moe_fp8_layer_for_marlin(layer)
     return f"fp8 marlin moe prep fine: w13 {tuple(layer.w13_weight.shape)} w2 {tuple(layer.w2_weight.shape)}"
+def G():
+    """In-situ replica: FILL_GB of resident filler, then full prep for LAYERS (default 3-12 = rank 0), real tensors."""
+    fill_gb = int(os.environ.get("FILL_GB", "40")); lo, hi = (int(x) for x in os.environ.get("LAYERS", "3-12").split("-"))
+    filler = [torch.ones(2**30, dtype=torch.uint8, device=dev) for _ in range(fill_gb)]
+    torch.cuda.synchronize(); print(f"   filler {fill_gb} GiB resident; allocated {torch.cuda.memory_allocated()/2**30:.1f} GiB", flush=True)
+    kept = []
+    for L in range(lo, hi + 1):
+        t = time.time(); w13, w13s, g13, w2, w2s, g2 = load_layer3(L)
+        from vllm.model_executor.layers.quantization.utils.marlin_utils_fp4 import prepare_nvfp4_moe_layer_for_marlin
+        out = prepare_nvfp4_moe_layer_for_marlin(layer=FakeLayer(), w13=w13, w13_scale=w13s, w13_scale_2=1.0 / g13,
+                                                 w2=w2, w2_scale=w2s, w2_scale_2=1.0 / g2, is_act_and_mul=True)
+        torch.cuda.synchronize(); del w13, w13s, w2, w2s
+        kept.append(out)   # keep the repacked weights resident like the real model does
+        print(f"   layer {L}: prep ok {time.time()-t:.0f}s, allocated {torch.cuda.memory_allocated()/2**30:.1f} GiB, peak {torch.cuda.max_memory_allocated()/2**30:.1f} GiB", flush=True)
+    return f"{hi-lo+1} layers prepared under {fill_gb} GiB filler"
 print(f"GPU: {torch.cuda.get_device_name(0)}  CUDA_LAUNCH_BLOCKING={os.environ.get('CUDA_LAUNCH_BLOCKING')}  stages={stages}", flush=True)
 for s in stages:
-    stage(s, {"A": A, "B": B, "C": C, "D": D, "F": F}[s])
+    stage(s, {"A": A, "B": B, "C": C, "D": D, "F": F, "G": G}[s])
 print("ALL REQUESTED STAGES PASSED")
