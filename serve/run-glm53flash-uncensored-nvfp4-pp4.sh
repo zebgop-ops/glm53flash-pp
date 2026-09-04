@@ -7,13 +7,13 @@
 # qwen38-pp and dsv4-a100: only one of them can run.
 #   container glm53nvfp4-pp, port 8003, served as GLM53Flash-Uncensored, dashboard entry GLM53U.
 # KV presets do not apply (different checkpoint): plain util sizing until budgets are derived with kvbudget.py.
-# GLM53_MAXLEN defaults to 262144 here until the first discovery boot has been profiled.
+# GLM53_MAXLEN defaults to 524288 (validated: pool 1,131,556 tokens, 519,711-token recall exact, 1.8k tok/s prefill).
 set -euo pipefail
 export GLM53_NAME=${GLM53_NAME:-glm53nvfp4-pp}
 export GLM53_PORT=${GLM53_PORT:-8003}
 export GLM53_SERVED=${GLM53_SERVED:-GLM53Flash-Uncensored}
 export GLM53_MODEL_DIR=${GLM53_MODEL_DIR:-/home/r/glm53-run/models/glm53-uncensored-nvfp4-mtp}
-export GLM53_MAXLEN=${GLM53_MAXLEN:-262144}
+export GLM53_MAXLEN=${GLM53_MAXLEN:-524288}   # validated 2026-09-04: pool 1,131,556 tok (2.16x), 519,711-token needle exact
 export GLM53_PARTITION=${GLM53_PARTITION:-14,11,11,9}   # measured: 4.2 GiB per expert layer; rank 3 carries lm_head + 7.6 GB FP8 drafter + embed (~10 GiB extras)
 export GLM53_UTIL=${GLM53_UTIL:-0.95}                    # 60.35 GiB target, under the 61.3 GiB allocator cap; 0.90 left rank 3 with 0.85 GiB of KV
 export GLM53_MEM_CAP_FRACTION=${GLM53_MEM_CAP_FRACTION:-0.965}   # clean OOM instead of a box-wedging fault near the top of the card

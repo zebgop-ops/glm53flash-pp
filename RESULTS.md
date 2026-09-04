@@ -32,13 +32,14 @@ Partition 13,11,11,10 · MTP depth 3 · `FULL_AND_PIECEWISE` CUDA graphs ·
 ## GLM53U: orcarouter/GLM-5.3-Flash-Uncensored-NVFP4 + transplanted MTP (first day)
 
 Partition 14,11,11,9 · MTP depth 3 (RedHat's layer 45, FP8 experts) · `FULL_AND_PIECEWISE` ·
-`--max-model-len 262144` · utilization 0.95 · allocator cap 0.965 · images on.
+`--max-model-len 524288` (wrapper default; first boot was 262k) · utilization 0.95 · allocator cap 0.965 · images on.
 
 | metric | value |
 |---|---|
 | per-rank consumed (weights + non-torch) | 50.3 / 47.6 / 47.6 / 49.0 GiB; peak activation ~4.7 GiB per rank |
-| KV pool | 1,310,720 tokens (5.0× a full 262k request); tightest rank is rank 0 (vision tower + embedding), per-rank budgets gain <0.5 GiB |
-| decode, 1 stream | 59–67 tok/s |
+| KV pool | 262k: 1,310,720 tokens (5.0×); **512k: 1,131,556 tokens (2.16× a full request)**; tightest rank is rank 0 (vision tower + embedding), per-rank budgets gain <0.5 GiB |
+| planted-value recall | exact at 519,711 tokens (prefill 1.79k tok/s, 290 s) |
+| decode, 1 stream | 59–67 tok/s (63.9 at 512k) |
 | decode, 4 streams | 166 tok/s (41.6 per stream) |
 | MTP acceptance (base head on the abliterated target) | 49 %; 75 / 48 / 25 % by position; ~2.5 tokens per step |
 | image test | exact ("Blue square, upper left / Red circle, lower right") |
