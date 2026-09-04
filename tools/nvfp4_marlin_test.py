@@ -108,7 +108,22 @@ def G():
         kept.append(out)   # keep the repacked weights resident like the real model does
         print(f"   layer {L}: prep ok {time.time()-t:.0f}s, allocated {torch.cuda.memory_allocated()/2**30:.1f} GiB, peak {torch.cuda.max_memory_allocated()/2**30:.1f} GiB", flush=True)
     return f"{hi-lo+1} layers prepared under {fill_gb} GiB filler"
+def H():
+    """Equivalence of the (possibly overlaid) _nvfp4_compute_scale_factor with the stock formula on random data."""
+    from vllm.model_executor.layers.quantization.utils.marlin_utils_fp4 import _nvfp4_compute_scale_factor
+    import inspect; src = inspect.getsource(_nvfp4_compute_scale_factor); print("   overlay version:", "glm53 overlay" in src, flush=True)
+    for shape, scale in (((8, 4096, 256), 1.0), ((288, 64, 16), 0.01), ((3, 10, 7), 200.0), ((1, 5), 0.5)):
+        x = (torch.rand(*shape, device=dev) * scale).to(torch.float8_e4m3fn).to(torch.bfloat16)
+        x.view(-1)[::7] = 0
+        ws = x.float() * (2**7); m = ws > 0
+        ref = 1.0
+        if m.any():
+            mx = ws[m].max()
+            if mx < 448 * (2**7): ref = float((448 * (2**7) / mx).log2().floor().exp2())
+        got = _nvfp4_compute_scale_factor(x, torch.bfloat16)
+        assert got == ref, (shape, got, ref)
+    return "chunked scale factor == stock formula on 4 shapes"
 print(f"GPU: {torch.cuda.get_device_name(0)}  CUDA_LAUNCH_BLOCKING={os.environ.get('CUDA_LAUNCH_BLOCKING')}  stages={stages}", flush=True)
 for s in stages:
-    stage(s, {"A": A, "B": B, "C": C, "D": D, "F": F, "G": G}[s])
+    stage(s, {"A": A, "B": B, "C": C, "D": D, "F": F, "G": G, "H": H}[s])
 print("ALL REQUESTED STAGES PASSED")
