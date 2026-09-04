@@ -367,6 +367,16 @@ class Worker(WorkerBase):
             )
             self.device = torch.device(f"cuda:{visible_device_index}")
             torch.accelerator.set_device_index(self.device)
+            # glm53 overlay: hard allocator ceiling. On these VRAM-unlocked CMP 170HX cards an
+            # allocation that lands near the top of the 63.5 GiB card can FAULT (Xid 31, driver
+            # wedged for every GPU until reboot) instead of raising OOM. Capping PyTorch's caching
+            # allocator below that zone turns such an event into a clean OutOfMemoryError.
+            # GLM53_MEM_CAP_FRACTION=0.965 -> ~61.3 GiB; unset = stock behaviour.
+            _cap = os.environ.get("GLM53_MEM_CAP_FRACTION")
+            if _cap:
+                torch.cuda.set_per_process_memory_fraction(float(_cap), self.device)
+                logger.info("GLM53_MEM_CAP_FRACTION=%s: allocator capped at %.2f GiB", _cap,
+                            float(_cap) * torch.cuda.get_device_properties(self.device).total_memory / 2**30)
 
             current_platform.check_if_supports_dtype(self.model_config.dtype)
 

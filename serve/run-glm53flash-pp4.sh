@@ -59,7 +59,10 @@
 #   with plain sizing). Would need per-rank budgets re-derived at that setting (kvbudget.py from a
 #   GLM53_KV_PRESET=0 boot with lower MAXLEN) and long-prompt transients are unprofiled -- untested.
 #   Diagnostic knobs kept: GLM53_SYNC, GLM53_BOUNDS_CHECK, GLM53_SAFE_GATHER, GLM53_SAFE_LOGITS,
-#   GLM53_MARLIN_DIAG (NVFP4 builds: log the scale tensor handed to the Marlin scale-factor step).
+#   GLM53_MARLIN_DIAG (NVFP4 builds: log the scale tensor handed to the Marlin scale-factor step),
+#   GLM53_MEM_CAP_FRACTION (e.g. 0.965: cap PyTorch's allocator at ~61.3 GiB so an allocation near the top of
+#   the card raises a clean OOM instead of the Xid-31 fault that wedges every GPU until reboot; the KV presets
+#   of the Intel build push rank 3 to 63.1 GiB and are NOT compatible with a cap below ~0.995).
 # Knobs: GLM53_PARTITION GLM53_GPUS GLM53_UTIL GLM53_MAXLEN GLM53_SEQS GLM53_CG GLM53_SPEC GLM53_MM GLM53_REASONING
 #        GLM53_KV0..3 (per-rank KV budgets in bytes)  GLM53_BOUNDS_CHECK=1 (diagnostic slot range checks)
 #        GLM53_SYNC=1 (CUDA_LAUNCH_BLOCKING=1: faults surface at the culprit kernel; slow, diagnostic only)
@@ -181,6 +184,7 @@ docker run -d --name "$NAME" --gpus "$([ "$GPU_ORDER" = all ] && echo all || ech
   "${KV_ENV[@]}" \
   ${GLM53_BOUNDS_CHECK:+-e GLM53_BOUNDS_CHECK=$GLM53_BOUNDS_CHECK} \
   ${GLM53_MARLIN_DIAG:+-e GLM53_MARLIN_DIAG=$GLM53_MARLIN_DIAG} \
+  ${GLM53_MEM_CAP_FRACTION:+-e GLM53_MEM_CAP_FRACTION=$GLM53_MEM_CAP_FRACTION} \
   ${GLM53_SYNC:+-e CUDA_LAUNCH_BLOCKING=1} \
   ${GLM53_SAFE_GATHER:+-e GLM53_SAFE_GATHER=1} \
   ${GLM53_SAFE_LOGITS:+-e GLM53_SAFE_LOGITS=$GLM53_SAFE_LOGITS} ${GLM53_SAFE_LOGITS_N:+-e GLM53_SAFE_LOGITS_N=$GLM53_SAFE_LOGITS_N} \
