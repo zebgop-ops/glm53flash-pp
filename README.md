@@ -34,7 +34,9 @@ bind-mount, with inline commentary on why each load-bearing flag is load-bearing
 are the validated production configuration: partition `13,11,11,10`, MTP depth 3,
 `FULL_AND_PIECEWISE` CUDA graphs, `--max-model-len 524288`, images on (64 per prompt; the limit is per prompt and a chat
 session is one prompt; video off, see below), per-rank KV budgets from the preset table, server default `reasoning_effort=high`
-(the template's own default is `max`; requests may pass `low|high|max`). Knobs: `GLM53_MAXLEN`, `GLM53_SPEC`,
+(the template's own default is `max`; requests may pass `low|high|max`). The launcher serves the upstream `zai-org/GLM-5.3-Flash` chat template of 2026-09-04
+(`serve/chat_template-flash-upstream.jinja`, `GLM53_CHAT_TEMPLATE`): same reasoning levels and vision handling as
+the checkpoints' copy plus three tool-calling fixes (a null assistant content no longer renders as the word "None"). Knobs: `GLM53_MAXLEN`, `GLM53_SPEC`,
 `GLM53_CG`, `GLM53_SEQS`, `GLM53_MM`, `GLM53_PARTITION`, `GLM53_KV0..3`, plus the
 diagnostic switches described in [FINDINGS.md](FINDINGS.md).
 

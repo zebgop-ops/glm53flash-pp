@@ -89,6 +89,13 @@ INTEL_MODEL="/hf/hub/models--Intel--GLM-5.3-Flash-W4A16-AutoRound/snapshots/$SNA
 # (an over-committed rank faults instead of OOM-ing cleanly) -> a new model boots with plain util sizing;
 # derive its own budgets with kvbudget.py from that discovery boot.
 MODEL_OVERRIDE=${GLM53_MODEL:-}
+# GLM53_CHAT_TEMPLATE: host path of a chat template to use instead of the checkpoint's. Default = upstream
+# zai-org/GLM-5.3-Flash template as of 2026-09-04 (glm53-run/chat_template-flash-upstream.jinja): same
+# reasoning levels (low|high|max) and vision handling as the checkpoints' copy, plus three tool-calling fixes
+# (assistant content=None no longer renders as the string "None", `~` name concatenation, early breaks in the
+# tool-result reordering check). Set GLM53_CHAT_TEMPLATE=none to use the checkpoint's own template.
+CHAT_TEMPLATE=${GLM53_CHAT_TEMPLATE:-/home/r/glm53-run/chat_template-flash-upstream.jinja}
+if [ "$CHAT_TEMPLATE" = none ]; then TEMPLATE_MOUNT=(); TEMPLATE_ARGS=(); else TEMPLATE_MOUNT=(-v "$CHAT_TEMPLATE:/chat_template.jinja:ro"); TEMPLATE_ARGS=(--chat-template /chat_template.jinja); fi
 # GLM53_MODEL_DIR: HOST directory (e.g. a composite dir built by make-nvfp4-mtp-dir.py, symlinks in /hf
 # container paths) mounted read-only at /model and served from there. Implies the same preset skip.
 MODEL_DIR=${GLM53_MODEL_DIR:-}
@@ -190,6 +197,7 @@ docker run -d --name "$NAME" --gpus "$([ "$GPU_ORDER" = all ] && echo all || ech
   ${GLM53_SAFE_LOGITS:+-e GLM53_SAFE_LOGITS=$GLM53_SAFE_LOGITS} ${GLM53_SAFE_LOGITS_N:+-e GLM53_SAFE_LOGITS_N=$GLM53_SAFE_LOGITS_N} \
   -v "$HFCACHE":/hf:ro \
   "${MODEL_DIR_MOUNT[@]}" \
+  "${TEMPLATE_MOUNT[@]}" \
   "${MOUNTS[@]}" \
   -p "$PORT":8000 \
   "$IMG" "$MODEL" --served-model-name "$SERVED" \
@@ -202,6 +210,7 @@ docker run -d --name "$NAME" --gpus "$([ "$GPU_ORDER" = all ] && echo all || ech
   "${SPEC_ARGS[@]}" \
   --enable-auto-tool-choice --tool-call-parser glm47 --reasoning-parser glm45 \
   --default-chat-template-kwargs "{\"reasoning_effort\":\"$REASONING\"}" \
+  "${TEMPLATE_ARGS[@]}" \
   >/dev/null
 
 echo "launched $NAME on :$PORT  (PP$PP $PARTITION, cudagraph $CG, maxlen $MAXLEN, seqs $SEQS, mtp $SPEC_N, mm $MM, overlay files: $((${#MOUNTS[@]}/2)))"
