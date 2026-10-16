@@ -1,0 +1,3 @@
+glm53um GLM53Flash-Uncensored http://localhost:8006/v1/chat/completions
+gsm8k: 196/200 = 0.980 | truncated 0 | errors 0 | 29505 completion tokens in 108s
+humaneval: 159/164 = 0.970 | truncated 0 | errors 0 | 38899 completion tokens in 143s

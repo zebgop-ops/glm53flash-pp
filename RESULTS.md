@@ -47,6 +47,27 @@ Partition 14,11,11,9 · MTP depth 3 (RedHat's layer 45, FP8 experts) · `FULL_AN
 | accuracy (tools/eval, greedy, server-default effort) | GSM8K 196/200 = 98.0 %; HumanEval 159/164 = 97.0 %; 0 truncations (recipe's base int4: GSM8K 97.5 %, HumanEval 151/164 = 92.1 %) |
 | boot | ~100 s weight load, ~6 min to ready |
 
+## GLM53UM: the same NVFP4 composite on the Morrowmake sm_80 engine (2026-10-16)
+
+`ghcr.io/morrowmake/vllm-cmp170hx:engine-819146023f` (vLLM 0.32-dev fork with Ampere kernels), their `serve.sh` in
+mode `mtp` with our transplanted drafter, LAYOUT=pp4, partition 14,11,11,9, util 0.95, allocator cap 0.965,
+262k context, three of our patches bind-mounted over their tree (`serve/morrowmake/`). Their fused Marlin MoE
+decode is W4A16-only, so the FP4 experts stay on upstream's Marlin path; the gain is attention/KDA/indexer
+kernels, PP hand-off work and the newer base.
+
+| metric | GLM53U (our image) | GLM53UM (Morrowmake) |
+|---|---|---|
+| KV pool at 262k | 1,310,720 | 1,507,328 |
+| decode, 1 stream (warm) | 59–67 tok/s | 82 tok/s |
+| decode, 4 streams | 166 | 220 (55 per stream) |
+| decode, 8 streams | — | 243 (30 per stream) |
+| MTP acceptance by position | 75 / 48 / 25 % | 79 / 57 / 38 % (2.73 tokens/step) |
+| GSM8K (200) / HumanEval (164), greedy | 98.0 % / 97.0 % | 98.0 % / 97.0 % (same 5 HumanEval failures, 3 of 4 GSM8K misses identical) |
+| hit-path soak 12×6 conc 6 | 0 loops / 72, 12/12 recalls | 0 loops / 72, 12/12 recalls |
+| image test | exact | exact |
+| per-card memory in service | — | 55.7–58.6 GiB (cap 61.2) |
+| boot | ~6 min | ~7 min first time (kernel compile, cached afterwards) |
+
 ## How the numbers moved
 
 | step | context | KV pool | decode 1 stream | decode 4 streams | notes |
