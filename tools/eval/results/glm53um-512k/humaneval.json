@@ -1,0 +1,1314 @@
+[
+ {
+  "i": 0,
+  "task": "HumanEval/0",
+  "ok": true,
+  "tokens": 170,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 1,
+  "task": "HumanEval/1",
+  "ok": true,
+  "tokens": 210,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 2,
+  "task": "HumanEval/2",
+  "ok": true,
+  "tokens": 92,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 3,
+  "task": "HumanEval/3",
+  "ok": true,
+  "tokens": 151,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 4,
+  "task": "HumanEval/4",
+  "ok": true,
+  "tokens": 144,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 5,
+  "task": "HumanEval/5",
+  "ok": true,
+  "tokens": 127,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 6,
+  "task": "HumanEval/6",
+  "ok": true,
+  "tokens": 200,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 7,
+  "task": "HumanEval/7",
+  "ok": true,
+  "tokens": 106,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 8,
+  "task": "HumanEval/8",
+  "ok": true,
+  "tokens": 145,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 9,
+  "task": "HumanEval/9",
+  "ok": true,
+  "tokens": 146,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 10,
+  "task": "HumanEval/10",
+  "ok": true,
+  "tokens": 179,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 11,
+  "task": "HumanEval/11",
+  "ok": true,
+  "tokens": 101,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 12,
+  "task": "HumanEval/12",
+  "ok": true,
+  "tokens": 119,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 13,
+  "task": "HumanEval/13",
+  "ok": true,
+  "tokens": 100,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 14,
+  "task": "HumanEval/14",
+  "ok": true,
+  "tokens": 76,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 15,
+  "task": "HumanEval/15",
+  "ok": true,
+  "tokens": 85,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 16,
+  "task": "HumanEval/16",
+  "ok": true,
+  "tokens": 77,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 17,
+  "task": "HumanEval/17",
+  "ok": true,
+  "tokens": 214,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 18,
+  "task": "HumanEval/18",
+  "ok": true,
+  "tokens": 144,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 19,
+  "task": "HumanEval/19",
+  "ok": true,
+  "tokens": 199,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 20,
+  "task": "HumanEval/20",
+  "ok": true,
+  "tokens": 277,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 21,
+  "task": "HumanEval/21",
+  "ok": true,
+  "tokens": 182,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 22,
+  "task": "HumanEval/22",
+  "ok": true,
+  "tokens": 203,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 23,
+  "task": "HumanEval/23",
+  "ok": true,
+  "tokens": 68,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 24,
+  "task": "HumanEval/24",
+  "ok": true,
+  "tokens": 104,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 25,
+  "task": "HumanEval/25",
+  "ok": true,
+  "tokens": 185,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 26,
+  "task": "HumanEval/26",
+  "ok": true,
+  "tokens": 121,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 27,
+  "task": "HumanEval/27",
+  "ok": true,
+  "tokens": 54,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 28,
+  "task": "HumanEval/28",
+  "ok": true,
+  "tokens": 63,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 29,
+  "task": "HumanEval/29",
+  "ok": true,
+  "tokens": 100,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 30,
+  "task": "HumanEval/30",
+  "ok": true,
+  "tokens": 127,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 31,
+  "task": "HumanEval/31",
+  "ok": true,
+  "tokens": 172,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 32,
+  "task": "HumanEval/32",
+  "ok": true,
+  "tokens": 382,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 33,
+  "task": "HumanEval/33",
+  "ok": true,
+  "tokens": 179,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 34,
+  "task": "HumanEval/34",
+  "ok": true,
+  "tokens": 79,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 35,
+  "task": "HumanEval/35",
+  "ok": true,
+  "tokens": 110,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 36,
+  "task": "HumanEval/36",
+  "ok": true,
+  "tokens": 143,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 37,
+  "task": "HumanEval/37",
+  "ok": true,
+  "tokens": 192,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 38,
+  "task": "HumanEval/38",
+  "ok": false,
+  "tokens": 156,
+  "finish": "stop",
+  "err": "^\n  File \"/tmp/tmpu_we0rn1/t.py\", line 25, in check\n    encoded_str = encode_cyclic(str)\n                  ^^^^^^^^^^^^^\nNameError: name 'encode_cyclic' is not defined. Did you mean: 'decode_cyclic'?\n"
+ },
+ {
+  "i": 39,
+  "task": "HumanEval/39",
+  "ok": true,
+  "tokens": 245,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 40,
+  "task": "HumanEval/40",
+  "ok": true,
+  "tokens": 228,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 41,
+  "task": "HumanEval/41",
+  "ok": true,
+  "tokens": 157,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 42,
+  "task": "HumanEval/42",
+  "ok": true,
+  "tokens": 120,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 43,
+  "task": "HumanEval/43",
+  "ok": true,
+  "tokens": 513,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 44,
+  "task": "HumanEval/44",
+  "ok": true,
+  "tokens": 151,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 45,
+  "task": "HumanEval/45",
+  "ok": true,
+  "tokens": 55,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 46,
+  "task": "HumanEval/46",
+  "ok": true,
+  "tokens": 255,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 47,
+  "task": "HumanEval/47",
+  "ok": true,
+  "tokens": 150,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 48,
+  "task": "HumanEval/48",
+  "ok": true,
+  "tokens": 79,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 49,
+  "task": "HumanEval/49",
+  "ok": true,
+  "tokens": 126,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 50,
+  "task": "HumanEval/50",
+  "ok": true,
+  "tokens": 122,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 51,
+  "task": "HumanEval/51",
+  "ok": true,
+  "tokens": 147,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 52,
+  "task": "HumanEval/52",
+  "ok": true,
+  "tokens": 90,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 53,
+  "task": "HumanEval/53",
+  "ok": true,
+  "tokens": 59,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 54,
+  "task": "HumanEval/54",
+  "ok": true,
+  "tokens": 151,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 55,
+  "task": "HumanEval/55",
+  "ok": true,
+  "tokens": 88,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 56,
+  "task": "HumanEval/56",
+  "ok": true,
+  "tokens": 143,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 57,
+  "task": "HumanEval/57",
+  "ok": true,
+  "tokens": 143,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 58,
+  "task": "HumanEval/58",
+  "ok": true,
+  "tokens": 129,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 59,
+  "task": "HumanEval/59",
+  "ok": true,
+  "tokens": 178,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 60,
+  "task": "HumanEval/60",
+  "ok": true,
+  "tokens": 110,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 61,
+  "task": "HumanEval/61",
+  "ok": true,
+  "tokens": 143,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 62,
+  "task": "HumanEval/62",
+  "ok": true,
+  "tokens": 124,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 63,
+  "task": "HumanEval/63",
+  "ok": true,
+  "tokens": 228,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 64,
+  "task": "HumanEval/64",
+  "ok": true,
+  "tokens": 177,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 65,
+  "task": "HumanEval/65",
+  "ok": false,
+  "tokens": 326,
+  "finish": "stop",
+  "err": "n <module>\n    check(circular_shift)\n    ~~~~~^^^^^^^^^^^^^^^^\n  File \"/tmp/tmp7ltc7d8x/t.py\", line 22, in check\n    assert candidate(12, 2) == \"12\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+ },
+ {
+  "i": 66,
+  "task": "HumanEval/66",
+  "ok": true,
+  "tokens": 127,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 67,
+  "task": "HumanEval/67",
+  "ok": true,
+  "tokens": 239,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 68,
+  "task": "HumanEval/68",
+  "ok": true,
+  "tokens": 387,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 69,
+  "task": "HumanEval/69",
+  "ok": true,
+  "tokens": 223,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 70,
+  "task": "HumanEval/70",
+  "ok": true,
+  "tokens": 180,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 71,
+  "task": "HumanEval/71",
+  "ok": true,
+  "tokens": 197,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 72,
+  "task": "HumanEval/72",
+  "ok": true,
+  "tokens": 89,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 73,
+  "task": "HumanEval/73",
+  "ok": true,
+  "tokens": 203,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 74,
+  "task": "HumanEval/74",
+  "ok": true,
+  "tokens": 226,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 75,
+  "task": "HumanEval/75",
+  "ok": true,
+  "tokens": 206,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 76,
+  "task": "HumanEval/76",
+  "ok": true,
+  "tokens": 228,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 77,
+  "task": "HumanEval/77",
+  "ok": true,
+  "tokens": 179,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 78,
+  "task": "HumanEval/78",
+  "ok": true,
+  "tokens": 336,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 79,
+  "task": "HumanEval/79",
+  "ok": true,
+  "tokens": 154,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 80,
+  "task": "HumanEval/80",
+  "ok": true,
+  "tokens": 191,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 81,
+  "task": "HumanEval/81",
+  "ok": true,
+  "tokens": 509,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 82,
+  "task": "HumanEval/82",
+  "ok": true,
+  "tokens": 163,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 83,
+  "task": "HumanEval/83",
+  "ok": true,
+  "tokens": 413,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 84,
+  "task": "HumanEval/84",
+  "ok": true,
+  "tokens": 156,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 85,
+  "task": "HumanEval/85",
+  "ok": true,
+  "tokens": 114,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 86,
+  "task": "HumanEval/86",
+  "ok": true,
+  "tokens": 162,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 87,
+  "task": "HumanEval/87",
+  "ok": true,
+  "tokens": 316,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 88,
+  "task": "HumanEval/88",
+  "ok": true,
+  "tokens": 301,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 89,
+  "task": "HumanEval/89",
+  "ok": true,
+  "tokens": 180,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 90,
+  "task": "HumanEval/90",
+  "ok": true,
+  "tokens": 157,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 91,
+  "task": "HumanEval/91",
+  "ok": true,
+  "tokens": 163,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 92,
+  "task": "HumanEval/92",
+  "ok": true,
+  "tokens": 188,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 93,
+  "task": "HumanEval/93",
+  "ok": false,
+  "tokens": 207,
+  "finish": "stop",
+  "err": "udasir') == 'mWDCSKR', \"This prints if this assert fails 2 (good for debugging!)\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: This prints if this assert fails 2 (good for debugging!)\n"
+ },
+ {
+  "i": 94,
+  "task": "HumanEval/94",
+  "ok": true,
+  "tokens": 442,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 95,
+  "task": "HumanEval/95",
+  "ok": true,
+  "tokens": 308,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 96,
+  "task": "HumanEval/96",
+  "ok": true,
+  "tokens": 242,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 97,
+  "task": "HumanEval/97",
+  "ok": false,
+  "tokens": 132,
+  "finish": "stop",
+  "err": "tmp/tmpctmkw71o/t.py\", line 17, in check\n    assert candidate(148, 412) == 16, \"First test error: \" + str(candidate(148, 412))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: First test error: 6\n"
+ },
+ {
+  "i": 98,
+  "task": "HumanEval/98",
+  "ok": true,
+  "tokens": 158,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 99,
+  "task": "HumanEval/99",
+  "ok": true,
+  "tokens": 214,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 100,
+  "task": "HumanEval/100",
+  "ok": true,
+  "tokens": 158,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 101,
+  "task": "HumanEval/101",
+  "ok": true,
+  "tokens": 139,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 102,
+  "task": "HumanEval/102",
+  "ok": true,
+  "tokens": 140,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 103,
+  "task": "HumanEval/103",
+  "ok": true,
+  "tokens": 277,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 104,
+  "task": "HumanEval/104",
+  "ok": true,
+  "tokens": 162,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 105,
+  "task": "HumanEval/105",
+  "ok": true,
+  "tokens": 378,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 106,
+  "task": "HumanEval/106",
+  "ok": true,
+  "tokens": 302,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 107,
+  "task": "HumanEval/107",
+  "ok": true,
+  "tokens": 288,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 108,
+  "task": "HumanEval/108",
+  "ok": true,
+  "tokens": 255,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 109,
+  "task": "HumanEval/109",
+  "ok": true,
+  "tokens": 364,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 110,
+  "task": "HumanEval/110",
+  "ok": true,
+  "tokens": 297,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 111,
+  "task": "HumanEval/111",
+  "ok": true,
+  "tokens": 222,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 112,
+  "task": "HumanEval/112",
+  "ok": true,
+  "tokens": 190,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 113,
+  "task": "HumanEval/113",
+  "ok": true,
+  "tokens": 301,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 114,
+  "task": "HumanEval/114",
+  "ok": true,
+  "tokens": 143,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 115,
+  "task": "HumanEval/115",
+  "ok": true,
+  "tokens": 355,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 116,
+  "task": "HumanEval/116",
+  "ok": true,
+  "tokens": 222,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 117,
+  "task": "HumanEval/117",
+  "ok": true,
+  "tokens": 243,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 118,
+  "task": "HumanEval/118",
+  "ok": true,
+  "tokens": 246,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 119,
+  "task": "HumanEval/119",
+  "ok": true,
+  "tokens": 286,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 120,
+  "task": "HumanEval/120",
+  "ok": true,
+  "tokens": 233,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 121,
+  "task": "HumanEval/121",
+  "ok": true,
+  "tokens": 147,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 122,
+  "task": "HumanEval/122",
+  "ok": true,
+  "tokens": 148,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 123,
+  "task": "HumanEval/123",
+  "ok": true,
+  "tokens": 298,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 124,
+  "task": "HumanEval/124",
+  "ok": true,
+  "tokens": 502,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 125,
+  "task": "HumanEval/125",
+  "ok": true,
+  "tokens": 200,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 126,
+  "task": "HumanEval/126",
+  "ok": false,
+  "tokens": 334,
+  "finish": "stop",
+  "err": "3, 3, 4]) == True, \"This prints if this assert fails 7 (good for debugging!)\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: This prints if this assert fails 7 (good for debugging!)\n"
+ },
+ {
+  "i": 127,
+  "task": "HumanEval/127",
+  "ok": true,
+  "tokens": 369,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 128,
+  "task": "HumanEval/128",
+  "ok": true,
+  "tokens": 195,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 129,
+  "task": "HumanEval/129",
+  "ok": true,
+  "tokens": 967,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 130,
+  "task": "HumanEval/130",
+  "ok": true,
+  "tokens": 741,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 131,
+  "task": "HumanEval/131",
+  "ok": true,
+  "tokens": 124,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 132,
+  "task": "HumanEval/132",
+  "ok": true,
+  "tokens": 933,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 133,
+  "task": "HumanEval/133",
+  "ok": true,
+  "tokens": 185,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 134,
+  "task": "HumanEval/134",
+  "ok": true,
+  "tokens": 310,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 135,
+  "task": "HumanEval/135",
+  "ok": true,
+  "tokens": 156,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 136,
+  "task": "HumanEval/136",
+  "ok": true,
+  "tokens": 201,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 137,
+  "task": "HumanEval/137",
+  "ok": true,
+  "tokens": 227,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 138,
+  "task": "HumanEval/138",
+  "ok": true,
+  "tokens": 123,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 139,
+  "task": "HumanEval/139",
+  "ok": true,
+  "tokens": 139,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 140,
+  "task": "HumanEval/140",
+  "ok": true,
+  "tokens": 236,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 141,
+  "task": "HumanEval/141",
+  "ok": true,
+  "tokens": 379,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 142,
+  "task": "HumanEval/142",
+  "ok": true,
+  "tokens": 310,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 143,
+  "task": "HumanEval/143",
+  "ok": true,
+  "tokens": 237,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 144,
+  "task": "HumanEval/144",
+  "ok": true,
+  "tokens": 214,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 145,
+  "task": "HumanEval/145",
+  "ok": true,
+  "tokens": 579,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 146,
+  "task": "HumanEval/146",
+  "ok": true,
+  "tokens": 208,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 147,
+  "task": "HumanEval/147",
+  "ok": true,
+  "tokens": 920,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 148,
+  "task": "HumanEval/148",
+  "ok": true,
+  "tokens": 319,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 149,
+  "task": "HumanEval/149",
+  "ok": true,
+  "tokens": 217,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 150,
+  "task": "HumanEval/150",
+  "ok": true,
+  "tokens": 134,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 151,
+  "task": "HumanEval/151",
+  "ok": true,
+  "tokens": 314,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 152,
+  "task": "HumanEval/152",
+  "ok": true,
+  "tokens": 248,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 153,
+  "task": "HumanEval/153",
+  "ok": true,
+  "tokens": 360,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 154,
+  "task": "HumanEval/154",
+  "ok": true,
+  "tokens": 171,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 155,
+  "task": "HumanEval/155",
+  "ok": true,
+  "tokens": 134,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 156,
+  "task": "HumanEval/156",
+  "ok": true,
+  "tokens": 224,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 157,
+  "task": "HumanEval/157",
+  "ok": true,
+  "tokens": 180,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 158,
+  "task": "HumanEval/158",
+  "ok": true,
+  "tokens": 150,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 159,
+  "task": "HumanEval/159",
+  "ok": true,
+  "tokens": 307,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 160,
+  "task": "HumanEval/160",
+  "ok": true,
+  "tokens": 275,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 161,
+  "task": "HumanEval/161",
+  "ok": true,
+  "tokens": 147,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 162,
+  "task": "HumanEval/162",
+  "ok": true,
+  "tokens": 104,
+  "finish": "stop",
+  "err": ""
+ },
+ {
+  "i": 163,
+  "task": "HumanEval/163",
+  "ok": false,
+  "tokens": 143,
+  "finish": "stop",
+  "err": "    ~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/tmpmjuo4594/t.py\", line 17, in check\n    assert candidate(2, 10) == [2, 4, 6, 8], \"Test 1\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Test 1\n"
+ }
+]
