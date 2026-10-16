@@ -67,6 +67,7 @@ kernels, PP hand-off work and the newer base.
 | image test | exact | exact |
 | per-card memory in service | — | 55.7–58.6 GiB (cap 61.2) |
 | **512k** (now the launcher default) | pool 1,131,556; 519,711-token recall exact at 1.79k tok/s prefill; C1 63.9 | pool **1,804,692** (3.44×); 519,711-token recall exact at **3.9k tok/s** prefill (133 s); C1 75.6; 16×8 soak 0 loops / 128, 16/16 recalls; no faults |
+| long-context loop soak (4 conversations × 6 turns over a ~130k-token shared document, 4 concurrent, sampling on) | — | 0 loops / 24, 4/4 recalls, no faults |
 | boot | ~6 min | ~7 min first time (kernel compile, cached afterwards) |
 
 ## How the numbers moved
