@@ -1,0 +1,36 @@
+--- a/vllm/models/glm5next/common/mtp.py
++++ b/vllm/models/glm5next/common/mtp.py
+@@ -4,6 +4,7 @@
+ from collections.abc import Callable, Iterable
+ 
+ import torch
++from vllm.logger import init_logger
+ import torch.nn as nn
+ 
+ from vllm.config import VllmConfig
+@@ -41,6 +42,9 @@
+ )
+ 
+ 
++logger = init_logger(__name__)
++
++
+ class Glm5NextMultiTokenPredictorLayer(nn.Module):
+     def __init__(self, vllm_config: VllmConfig, prefix: str) -> None:
+         super().__init__()
+@@ -336,6 +340,15 @@
+             if name.startswith("model.language_model."):
+                 name = name.replace("model.language_model.", "model.", 1)
+             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
++            if spec_layer is None and name == "model.embed_tokens.weight" and name in params_dict:
++                # glm53 overlay: under PP the drafter keeps a PRIVATE embed_tokens and this
++                # checkpoint ships no MTP embedding; the target table lives on rank 0, so
++                # load it from the checkpoint here (random-init embedding = 6% acceptance).
++                param = params_dict[name]
++                getattr(param, "weight_loader", default_weight_loader)(param, loaded_weight)
++                loaded_params.add(name)
++                logger.info("MTP drafter: loaded private embed_tokens from the target checkpoint (PP)")
++                continue
+             if spec_layer is None:
+                 continue
+             name = self._rewrite_spec_layer_name(spec_layer, name)

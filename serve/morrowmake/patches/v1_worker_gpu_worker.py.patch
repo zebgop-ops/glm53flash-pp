@@ -1,0 +1,13 @@
+--- a/vllm/v1/worker/gpu_worker.py
++++ b/vllm/v1/worker/gpu_worker.py
+@@ -542,6 +542,10 @@
+             )
+             self.device = torch.device(f"cuda:{visible_device_index}")
+             torch.accelerator.set_device_index(self.device)
++            _cap = os.environ.get("GLM53_MEM_CAP_FRACTION")  # glm53 overlay: clean OOM instead of a wedging fault near the top of the card
++            if _cap:
++                torch.cuda.set_per_process_memory_fraction(float(_cap), self.device)
++                logger.info("GLM53_MEM_CAP_FRACTION=%s: allocator capped at %.2f GiB", _cap, float(_cap) * torch.cuda.get_device_properties(self.device).total_memory / 2**30)
+ 
+             current_platform.check_if_supports_dtype(self.model_config.dtype)
+ 

@@ -1,0 +1,31 @@
+--- a/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py
++++ b/vllm/model_executor/layers/quantization/utils/marlin_utils_fp4.py
+@@ -46,13 +46,21 @@
+     if a_dtype is not None and a_dtype == torch.half:
+         return 1.0
+ 
+-    ws_float = marlin_scales.float() * (2**7)
+-    nonzero_mask = ws_float > 0
+-    if nonzero_mask.any():
+-        max_val = ws_float[nonzero_mask].max()
+-        if max_val < 448 * (2**7):
+-            sf = (448 * (2**7) / max_val).log2().floor().exp2()
+-            return sf.item()
++    # glm53 overlay (CMP 170HX): the stock masked index over the 3-D [E, 2N, K/16]
++    # scale tensor builds a 6.75 GiB int64 index (+1.2 GiB float copy) per expert
++    # layer; near the top of these cards that faults instead of OOM-ing. Same
++    # maximum, computed per leading slice (megabytes of transient).
++    max_val = None
++    slices = marlin_scales.unbind(0) if marlin_scales.dim() > 0 and marlin_scales.shape[0] > 1 else [marlin_scales.reshape(-1)]
++    for sl in slices:
++        ws_float = sl.float() * (2**7)
++        pos = ws_float[ws_float > 0]
++        if pos.numel():
++            m = pos.max()
++            max_val = m if max_val is None else torch.maximum(max_val, m)
++    if max_val is not None and max_val < 448 * (2**7):
++        sf = (448 * (2**7) / max_val).log2().floor().exp2()
++        return sf.item()
+     return 1.0
+ 
+ 
