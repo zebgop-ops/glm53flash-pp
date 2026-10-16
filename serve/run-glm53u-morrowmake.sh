@@ -35,7 +35,11 @@ timeout 90 docker run --rm --gpus all --entrypoint /opt/venv/bin/python "$IMG" -
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 mkdir -p "$MM/cache/tmp"
 V=/opt/vllm-src/vllm
-EXTRA_ARGS="--chat-template /chat_template.jinja $EXTRA"
+# Their serve.sh only emits --limit-mm-per-prompt when MM_CAP=1, and then forces video count=1; vLLM's default
+# without the flag is ONE image per prompt (= per chat session). Pass our own limit via EXTRA_ARGS (last flag wins):
+# 64 images, video off (a video request killed the engine on our image; untested on theirs).
+MM_LIMIT=${GLM53UM_MM:-'{"image":64,"video":0}'}
+EXTRA_ARGS="--chat-template /chat_template.jinja --limit-mm-per-prompt $MM_LIMIT $EXTRA"
 docker run -d --name "$NAME" --gpus all --ipc=host --shm-size=32g --user "$(id -u):$(id -g)" --workdir /cache \
   -p "$PORT:8000" \
   -e LAYOUT="$LAYOUT" -e P2P=off -e VENV=/opt/venv -e MODEL=/model -e HOST=0.0.0.0 -e PORT=8000 \
@@ -46,7 +50,7 @@ docker run -d --name "$NAME" --gpus all --ipc=host --shm-size=32g --user "$(id -
   -e CUDA_CACHE_PATH=/cache/.nv/ComputeCache -e VLLM_IMAGE_CACHE_SEED=0 \
   -e VLLM_PP_LAYER_PARTITION="$PARTITION" -e NCCL_P2P_DISABLE=1 -e NCCL_IB_DISABLE=1 \
   -e GPU_UTIL="$UTIL" -e MAX_LEN="$MAXLEN" -e SPEC_N="$SPEC_N" -e SERVED_MODEL_NAME="$SERVED" -e DEFAULT_REASONING_EFFORT="$REASONING" \
-  -e MM_IMAGES=64 -e GLM53_MEM_CAP_FRACTION="$CAP" -e EXTRA_ARGS="$EXTRA_ARGS" \
+  -e GLM53_MEM_CAP_FRACTION="$CAP" -e EXTRA_ARGS="$EXTRA_ARGS" \
   -v "$MM/recipe/serve.sh:/recipe/serve.sh:ro" -v "$MM/recipe/boot_check.py:/recipe/boot_check.py:ro" \
   -v "$MM/recipe/p2p_check.py:/recipe/p2p_check.py:ro" -v "$MM/recipe/p2p_check.sh:/recipe/p2p_check.sh:ro" -v "$MM/recipe/p2p_probe.cu:/recipe/p2p_probe.cu:ro" \
   -v /home/r/.cache/huggingface:/hf:ro -v "$MODEL_DIR:/model:ro" -v "$MM/cache:/cache" -v "$TEMPLATE:/chat_template.jinja:ro" \
