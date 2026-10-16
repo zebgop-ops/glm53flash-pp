@@ -44,6 +44,7 @@ Partition 14,11,11,9 · MTP depth 3 (RedHat's layer 45, FP8 experts) · `FULL_AN
 | MTP acceptance (base head on the abliterated target) | 49 %; 75 / 48 / 25 % by position; ~2.5 tokens per step |
 | image test | exact ("Blue square, upper left / Red circle, lower right") |
 | hit-path soak (12 conversations × 6 turns, 6 concurrent, temperature 1.0, cache hits) | 0 loops / 72 responses, **12/12** planted-code recalls (the abliterated model relays the code the base model refused as "injected content") |
+| accuracy (tools/eval, greedy, server-default effort) | GSM8K 196/200 = 98.0 %; HumanEval 159/164 = 97.0 %; 0 truncations (recipe's base int4: GSM8K 97.5 %, HumanEval 151/164 = 92.1 %) |
 | boot | ~100 s weight load, ~6 min to ready |
 
 ## How the numbers moved
