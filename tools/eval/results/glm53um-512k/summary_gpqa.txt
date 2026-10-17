@@ -1,0 +1,2 @@
+glm53um-512k GLM53Flash-Uncensored http://localhost:8006/v1/chat/completions
+gpqa_diamond: 157/198 = 0.793 | truncated 25 | errors 0 | unparsed 25 | 2162892 completion tokens (10923 avg) in 6215s
